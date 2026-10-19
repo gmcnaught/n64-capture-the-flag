@@ -4,6 +4,16 @@ Two-player, one-room capture-the-flag game for the Nintendo 64 (libdragon),
 built on the n64-platformer framework: the same integer-only C99 core
 (movement, collision, replays) running on N64 and an SDL3 host build.
 
+| | |
+|---|---|
+| ![Title screen](screenshots/title.png) | ![Red carries a blue flag home while blue swings](screenshots/gameplay.png) |
+| ![Controls screen in the pause menu](screenshots/controls.png) | ![Round winner banner](screenshots/winner.png) |
+
+**Play it:** download `capture-the-flag.z64` from the
+[latest release](https://github.com/gmcnaught/n64-capture-the-flag/releases/latest)
+and run it on the MiSTer N64 core or in the ares emulator (both tested;
+real hardware is untested). Two controllers.
+
 Status: playable capture the flag in a Joust-scale arena after the
 whiteboard sketch. Each team has 3 flags by its start; steal the other
 team's flags and carry them, one at a time, into your goal (the ledge with
