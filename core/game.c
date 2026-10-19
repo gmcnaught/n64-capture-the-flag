@@ -10,6 +10,11 @@ static int body_overlap(const Body *a, const Body *b)
     return overlap(a->x, a->y, a->w, a->h, b->x, b->y, b->w, b->h);
 }
 
+static int body_overlap_box(const Body *a, const Solid *s)
+{
+    return overlap(a->x, a->y, a->w, a->h, s->x, s->y, s->w, s->h);
+}
+
 /* ---- level ---------------------------------------------------------------- */
 
 /* Where a player stands at an entity: centered on its bottom edge. */
@@ -84,6 +89,16 @@ static void read_entities(Game *g)
             if (g->pad_count < MAX_PADS)
                 g->pads[g->pad_count++] = (JumpPad){e.x, e.y, 0};
             break;
+        case ENT_PLATFORM:
+            if (g->platform_count < MAX_PLATFORMS && e.w && e.h) {
+                int i = g->platform_count++;
+                g->platforms[i] = (Platform){e.x, e.y, e.x2, e.y2, (int32_t)e.param << 8,
+                                             (uint16_t)(e.flag >> 1), 0, 1, 0};
+                g->lv.solids[i] = (Solid){e.x, e.y, (int16_t)e.w, (int16_t)e.h, 1,
+                                          (uint8_t)(e.flag & 1)};
+                g->lv.solid_count = g->platform_count;
+            }
+            break;
         case ENT_WIND:
             if (e.flag > e.x2 && e.x2 > 2 * WIND_RAMP && e.param && g->wind_count < MAX_WINDS) {
                 WindZone *z = &g->winds[g->wind_count++];
@@ -133,9 +148,53 @@ static uint16_t fruit_interval(Game *g)
     return (uint16_t)(n > 0xffff ? 0xffff : n);
 }
 
+static int iabs(int v) { return v < 0 ? -v : v; }
+
+/* One frame along a platform's path: advance (or stand at an end), and
+ * write the top-left for this frame. */
+static void path_step(Platform *pl, int *x, int *y)
+{
+    int dx = pl->x1 - pl->x0, dy = pl->y1 - pl->y0;
+    int len = iabs(dx) > iabs(dy) ? iabs(dx) : iabs(dy);
+    if (pl->wait) {
+        pl->wait--;
+    } else if (len) {
+        pl->prog += pl->dir * pl->speed;
+        if (pl->prog >= FX(len)) {
+            pl->prog = FX(len);
+            pl->dir = -1;
+            pl->wait = PLATFORM_WAIT;
+        } else if (pl->prog <= 0) {
+            pl->prog = 0;
+            pl->dir = 1;
+            pl->wait = PLATFORM_WAIT;
+        }
+    }
+    int s = fx_floor(pl->prog);
+    *x = len ? pl->x0 + dx * s / len : pl->x0;
+    *y = len ? pl->y0 + dy * s / len : pl->y0;
+}
+
+/* Platforms to their round-start places: phase frames along the path. */
+static void reset_platforms(Game *g)
+{
+    for (int i = 0; i < g->platform_count; i++) {
+        Platform *pl = &g->platforms[i];
+        int x = pl->x0, y = pl->y0;
+        pl->prog = 0;
+        pl->dir = 1;
+        pl->wait = 0;
+        for (int k = 0; k < pl->phase; k++)
+            path_step(pl, &x, &y);
+        g->lv.solids[i].x = (int16_t)x;
+        g->lv.solids[i].y = (int16_t)y;
+    }
+}
+
 static void new_round(Game *g)
 {
     g->round_frame = 0;
+    reset_platforms(g);
     for (int i = 0; i < g->wind_count; i++)
         g->winds[i].force = 0;
     g->fruit_active = 0;
@@ -274,6 +333,19 @@ static int layout_goal(Game *g, int t)
     return n;
 }
 
+/* Player t goes back to its start, keeping its pips. */
+static void send_home(Game *g, int t)
+{
+    Player *p = &g->players[t];
+    g->caught[t] = 0;
+    player_place(p, g->spawn_x[t], g->spawn_y[t], 0);
+    /* Starts are by the middle pillar: face away from the middle, into the arena. */
+    p->facing = (int8_t)(g->spawn_x[t] + PLAYER_HIT_W / 2 < g->lv.px_w / 2 ? -1 : 1);
+    p->invuln = (uint8_t)g->tuning.invuln_frames;
+    p->attack_timer = 0;
+    g->sfx |= SFX_BIT(SFX_HIT);
+}
+
 /* Carrier t is hit: the flag drops where the carrier stands (then falls) and
  * the carrier goes back to its start, keeping its pips. */
 static void drop_and_send_home(Game *g, int t)
@@ -285,13 +357,7 @@ static void drop_and_send_home(Game *g, int t)
     f->body.y = (int16_t)(p->body.y + p->body.h - FLAG_H);
     f->body.vx = f->body.vy = f->body.rem_x = f->body.rem_y = 0;
     g->carrying[t] = -1;
-    g->caught[t] = 0;
-    player_place(p, g->spawn_x[t], g->spawn_y[t], 0);
-    /* Starts are by the middle pillar: face away from the middle, into the arena. */
-    p->facing = (int8_t)(g->spawn_x[t] + PLAYER_HIT_W / 2 < g->lv.px_w / 2 ? -1 : 1);
-    p->invuln = (uint8_t)g->tuning.invuln_frames;
-    p->attack_timer = 0;
-    g->sfx |= SFX_BIT(SFX_HIT);
+    send_home(g, t);
 }
 
 static int can_take(const Flag *f, int t)
@@ -390,17 +456,16 @@ static int bodies_collide(const Game *g)
            !body_overlap(&a->body, &b->body);
 }
 
+/* The other player as the solid after the platforms. */
 static void set_extra_solid(Game *g, const Body *b)
 {
-    g->lv.solid_x = b->x;
-    g->lv.solid_y = b->y;
-    g->lv.solid_w = b->w;
-    g->lv.solid_h = b->h;
+    g->lv.solids[g->platform_count] = (Solid){b->x, b->y, b->w, b->h, 1, 0};
+    g->lv.solid_count = (uint8_t)(g->platform_count + 1);
 }
 
 static void clear_extra_solid(Game *g)
 {
-    g->lv.solid_w = 0;
+    g->lv.solid_count = g->platform_count;
 }
 
 /* After the player underneath moved, a rider it moved into is lifted onto
@@ -417,6 +482,99 @@ static void lift_rider(Game *g, Player *under, Player *rider)
         u->rem_y = 0;
         if (u->vy < 0)
             u->vy = 0;
+    }
+}
+
+/* ---- moving platforms (Celeste "Solid" model, from n64-platformer) -------- */
+
+/* Player t pushed into a wall: home, a carrier dropping its flag first. */
+static void squish(Game *g, int t)
+{
+    if (g->carrying[t] >= 0)
+        drop_and_send_home(g, t);
+    else
+        send_home(g, t);
+}
+
+static int on_top(const Body *b, const Solid *s)
+{
+    return b->y + b->h == s->y && b->x < s->x + s->w && b->x + b->w > s->x;
+}
+
+/* Move platform i by (dx, dy) whole px: riders go with it; players in its
+ * way are pushed (dropped flags are not: one dropped under a platform stays
+ * there) and squished if blocked. */
+static void solid_move(Game *g, int i, int dx, int dy)
+{
+    Solid *s = &g->lv.solids[i];
+    Body *bodies[TEAM_COUNT + MAX_GAME_FLAGS];
+    int8_t who[TEAM_COUNT + MAX_GAME_FLAGS];
+    uint8_t riding[TEAM_COUNT + MAX_GAME_FLAGS];
+    int n = 0;
+    for (int t = 0; t < TEAM_COUNT; t++) {
+        Player *p = &g->players[t];
+        if (!alive(p) || g->caught[t])
+            continue;
+        bodies[n] = &p->body;
+        who[n] = (int8_t)t;
+        riding[n] = on_top(&p->body, s) && !(s->oneway && p->drop);
+        n++;
+    }
+    /* A player standing on a rider rides too. */
+    if (n == TEAM_COUNT && bodies_collide(g))
+        for (int k = 0; k < TEAM_COUNT; k++)
+            if (!riding[k] && riding[1 - k] && stands_on(bodies[k], bodies[1 - k]))
+                riding[k] = 1;
+    for (int f = 0; f < g->flag_count; f++)
+        if (g->flags[f].state == FS_DROPPED) {
+            bodies[n] = &g->flags[f].body;
+            who[n] = (int8_t)(TEAM_COUNT + f);
+            riding[n] = on_top(bodies[n], s);
+            n++;
+        }
+    if (dx) {
+        s->x = (int16_t)(s->x + dx);
+        s->active = 0;
+        for (int k = 0; k < n; k++) {
+            Body *b = bodies[k];
+            if (!s->oneway && who[k] < TEAM_COUNT && body_overlap_box(b, s)) {
+                int amt = dx > 0 ? s->x + s->w - b->x : s->x - (b->x + b->w);
+                if (body_move_x(b, FX(amt), &g->lv))
+                    squish(g, who[k]);
+            } else if (riding[k]) {
+                body_move_x(b, FX(dx), &g->lv);
+            }
+        }
+        s->active = 1;
+    }
+    if (dy) {
+        int top = s->y;
+        s->y = (int16_t)(s->y + dy);
+        s->active = 0;
+        for (int k = 0; k < n; k++) {
+            Body *b = bodies[k];
+            if (!s->oneway && who[k] < TEAM_COUNT && body_overlap_box(b, s)) {
+                int amt = dy > 0 ? s->y + s->h - b->y : s->y - (b->y + b->h);
+                if (body_move_y(b, FX(amt), &g->lv, 0))
+                    squish(g, who[k]);
+            } else if (riding[k]) {
+                body_move_y(b, FX(dy), &g->lv, 0);
+            } else if (s->oneway && dy < 0 && b->vy >= 0 && b->y + b->h > s->y &&
+                       b->y + b->h <= top && b->x < s->x + s->w && b->x + b->w > s->x &&
+                       !(who[k] < TEAM_COUNT && g->players[who[k]].drop)) {
+                body_move_y(b, FX(s->y - (b->y + b->h)), &g->lv, 0);   /* rising under its feet */
+            }
+        }
+        s->active = 1;
+    }
+}
+
+static void update_platforms(Game *g)
+{
+    for (int i = 0; i < g->platform_count; i++) {
+        int x, y;
+        path_step(&g->platforms[i], &x, &y);
+        solid_move(g, i, x - g->lv.solids[i].x, y - g->lv.solids[i].y);
     }
 }
 
@@ -770,6 +928,7 @@ void game_tick(Game *g, const InputState in[TEAM_COUNT])
             g->players[t].push_x = game_wind_at(g, &g->players[t].body);
     }
     g->round_frame++;
+    update_platforms(g);
 
     uint8_t stacked_before[TEAM_COUNT];     /* the other player stood on t */
     for (int t = 0; t < TEAM_COUNT; t++)
@@ -895,6 +1054,13 @@ uint32_t game_hash(const Game *g)
         h = mix(h, g->round_frame);
         for (int i = 0; i < g->wind_count; i++)
             h = mix(h, (uint32_t)g->winds[i].force ^ (uint32_t)(uint8_t)g->winds[i].dir << 24);
+    }
+    for (int i = 0; i < g->platform_count; i++) {
+        const Platform *pl = &g->platforms[i];
+        const Solid *so = &g->lv.solids[i];
+        h = mix(h, (uint16_t)so->x | (uint32_t)(uint16_t)so->y << 16);
+        h = mix(h, (uint32_t)pl->prog);
+        h = mix(h, (uint32_t)(uint8_t)pl->dir | (uint32_t)pl->wait << 8);
     }
     for (int t = 0; t < TEAM_COUNT; t++) {
         h = hash_player(h, &g->players[t]);

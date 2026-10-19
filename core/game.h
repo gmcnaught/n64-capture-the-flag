@@ -33,6 +33,8 @@
  * the water (the releaser only after WATER_GRACE frames) is caught: carried
  * at the front without control, put down standing where it drains. A
  * carrier keeps its flag.
+ * Moving platforms carry, push and squish players and dropped flags
+ * (Platform, below).
  * Hits on a player without a flag knock back and cost a pip; at 0 pips the
  * player plays the death animation and respawns at its start after
  * RESPAWN_FRAMES. Hazards cost a pip and respawn at the last safe ground.
@@ -94,6 +96,28 @@ typedef struct {
     int32_t force;                  /* fx px/frame pushing right (negative: left) this frame */
     int8_t dir;                     /* direction of the current or next gust: 1 right, -1 left */
 } WindZone;
+/* Moving platforms (ENT_PLATFORM): a solid box (Level.solids, the same
+ * index) going from (x0, y0) to (x1, y1) and back at speed, standing
+ * PLATFORM_WAIT frames at each end, reset at each round start to phase
+ * frames into that cycle. Each tick, before the players move, it moves
+ * by whole px: players and dropped flags on its top (a player standing on
+ * a rider, too) go with it, players in its way are pushed, and one pushed
+ * into a wall is squished: back to its start without losing a pip (a
+ * carrier drops its flag first). Dropped flags are not pushed (one under
+ * a platform stays there). A one-way platform carries only; rising, it
+ * also picks up a body whose feet it passes. */
+#define MAX_PLATFORMS (LEVEL_MAX_SOLIDS - 1)  /* the last solid is the other player */
+#define PLATFORM_WAIT 30
+
+typedef struct {
+    int16_t x0, y0, x1, y1;         /* path ends, top-left sim px */
+    int32_t speed;                  /* fx px/frame along the path's longer axis */
+    uint16_t phase;                 /* frames into the cycle at a round start */
+    int32_t prog;                   /* fx px along the longer axis from (x0, y0) */
+    int8_t dir;                     /* 1 toward (x1, y1), -1 back */
+    uint8_t wait;                   /* frames left standing at an end */
+} Platform;
+
 #define FRUIT_LIFE 600          /* an untouched fruit disappears after 10 s */
 #define WATER_LEN 12            /* stream length, cells */
 #define WATER_STEP 3            /* frames per cell the front moves */
@@ -172,6 +196,10 @@ typedef struct {
     WindZone winds[MAX_WINDS];
     uint8_t wind_count;
     uint32_t round_frame;           /* frames of play this round (after the countdown) */
+    /* Moving platforms (ENT_PLATFORM); their boxes are lv.solids[0 ..
+     * platform_count - 1]. Hashed only when the level has platforms. */
+    Platform platforms[MAX_PLATFORMS];
+    uint8_t platform_count;
     /* Output for the platform, rewritten every tick (not hashed). */
     uint32_t sfx;               /* SFX_BIT()s raised this tick */
 } Game;

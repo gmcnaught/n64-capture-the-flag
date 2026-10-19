@@ -15,6 +15,10 @@
  * followed between gusts). The other player is a fixed solid
  * box where it stands at the end of the replay (it must keep still while
  * the route is followed), as the game makes it solid to the moving one.
+ * On a level with moving platforms, where a move goes depends on
+ * when it starts, every move runs the whole game (game_tick, the other
+ * player idle) from the exact game state, so routes include riding and
+ * pushing; a move in which the player is squished or hurt fails.
  *
  * A move starts at rest: hold DIR until the body x crosses TX (walking off
  * edges included; the jump then uses coyote time), then
@@ -43,10 +47,12 @@
 
 typedef struct {
     Player p;                   /* at rest */
+    Game g;                     /* game_mode: the whole game, p = g.players[side] */
     int parent;
     char move[48];
 } Node;
 
+static int game_mode, side;
 static Level lv;
 static PlayerTuning tun;
 static int targets[3][4], ntargets;     /* target rectangles: home flags or a goal */
@@ -65,33 +71,46 @@ static int touches(const Body *b)
 }
 
 static uint16_t prev;
+static Game sim;                /* game_mode: the game the move runs in */
 
-static void tick(Player *p, uint16_t held)
+/* One frame with held input. 0 if the player was squished or hurt (game_mode). */
+static int tick(Player *p, uint16_t held)
 {
+    if (game_mode) {
+        InputState in[TEAM_COUNT] = {{BTN_CONNECTED, 0, 0}, {BTN_CONNECTED, 0, 0}};
+        in[side].buttons |= held;
+        game_tick(&sim, in);
+        *p = sim.players[side];
+        return !(sim.sfx & SFX_BIT(SFX_HIT)) && p->state != PS_HURT;
+    }
     InputState in = {(uint16_t)(held | BTN_CONNECTED), 0, 0};
     uint16_t pressed = held & (uint16_t)~prev;
     prev = held;
     player_tick(p, &lv, &tun, &in, pressed);
+    return 1;
 }
 
 enum { K_FALL, K_JUMP, K_DROP, K_DOUBLE };
 
-/* Simulate one move from rest in state *from. Returns 1 if it ends at rest
- * (state in *out) or touches the target (*hit = 1), 0 if it fails. */
-static int simulate(const Player *from, int dir, int txs, int kind, int k, int air_same,
+/* Simulate one move from rest in node from. Returns 1 if it ends at rest
+ * (state in *out, and in sim for game_mode) or touches the target (*hit =
+ * 1), 0 if it fails. */
+static int simulate(const Node *from, int dir, int txs, int kind, int k, int air_same,
                     Player *out, int *hit)
 {
-    Player p = *from;
+    Player p = from->p;
+    if (game_mode)
+        sim = from->g;
     prev = 0;
     *hit = 0;
     uint16_t d = dir < 0 ? BTN_LEFT : BTN_RIGHT;
     uint16_t air = air_same ? d : 0;
     int f = 0;
-    tick(&p, 0);
-    if (!p.grounded)
+    if (!tick(&p, 0) || !p.grounded)
         return 0;
     while (dir < 0 ? p.body.x > txs : p.body.x < txs) {
-        tick(&p, d);
+        if (!tick(&p, d))
+            return 0;
         if (touches(&p.body)) { *hit = 1; goto done; }
         if (++f > 300 || p.body.y >= lv.px_h)
             return 0;
@@ -101,14 +120,16 @@ static int simulate(const Player *from, int dir, int txs, int kind, int k, int a
     if (kind == K_DROP) {
         if (!p.grounded)
             return 0;
-        tick(&p, BTN_DOWN); tick(&p, BTN_DOWN);
-        tick(&p, BTN_DOWN | BTN_JUMP); tick(&p, BTN_DOWN | BTN_JUMP);
+        if (!tick(&p, BTN_DOWN) || !tick(&p, BTN_DOWN) || !tick(&p, BTN_DOWN | BTN_JUMP) ||
+            !tick(&p, BTN_DOWN | BTN_JUMP))
+            return 0;
     }
     for (int j = 0; j < 400; j++) {
         uint16_t h = air;
         if (kind == K_JUMP || (kind == K_DOUBLE && (j < k - 1 || j >= k)))
             h |= BTN_JUMP;
-        tick(&p, h);
+        if (!tick(&p, h))
+            return 0;
         if (touches(&p.body)) { *hit = 1; goto done; }
         if (p.body.y >= lv.px_h)
             return 0;
@@ -118,7 +139,8 @@ static int simulate(const Player *from, int dir, int txs, int kind, int k, int a
     if (!p.grounded)
         return 0;
     for (int j = 0; j < 60 && (p.body.vx || !p.grounded); j++) {
-        tick(&p, 0);
+        if (!tick(&p, 0))
+            return 0;
         if (touches(&p.body)) { *hit = 1; goto done; }
     }
 done:
@@ -159,18 +181,15 @@ int main(int argc, char **argv)
     if (level_load(&lv, data, (uint32_t)n)) { fprintf(stderr, "bad level\n"); return 2; }
     Replay rp;
     if (replay_load(&rp, argv[2])) { fprintf(stderr, "%s: bad replay\n", argv[2]); return 2; }
-    int side = atoi(argv[3]) ? 1 : 0;
+    side = atoi(argv[3]) ? 1 : 0;
     static Game g;
     replay_start(&rp, &g, &lv);
     for (size_t i = 0; i < rp.count; i++)
         game_tick(&g, rp.frames[i].in);
+    game_mode = g.platform_count > 0;
     const Player *o = &g.players[!side];
-    if (!o->dead && !g.caught[!side]) {
-        lv.solid_x = o->body.x;
-        lv.solid_y = o->body.y;
-        lv.solid_w = o->body.w;
-        lv.solid_h = o->body.h;
-    }
+    if (!o->dead && !g.caught[!side])
+        lv.solids[lv.solid_count++] = (Solid){o->body.x, o->body.y, o->body.w, o->body.h, 1, 0};
     tun = g.tuning;
     if (g.carrying[side] >= 0)
         tun.run_speed = tun.carry_speed;
@@ -195,13 +214,15 @@ int main(int argc, char **argv)
     static const int ks[] = {3, 8, 12, 16, 20, 24, 28, 31, 34};
     nodes[0].p = g.players[side];
     nodes[0].p.push_x = 0;      /* no wind: make_replays.py follows routes in calm */
+    if (game_mode)
+        nodes[0].g = g;
     nodes[0].parent = -1;
     nodes[0].move[0] = 0;
     nnodes = 1;
     for (int head = 0; head < nnodes; head++) {
-        const Player *cur = &nodes[head].p;
+        const Node *cur = &nodes[head];
         for (int dir = -1; dir <= 1; dir += 2)
-            for (int txs = cur->body.x + dir * 2; txs >= -40 && txs <= lv.px_w + 40; txs += dir * QX)
+            for (int txs = cur->p.body.x + dir * 2; txs >= -40 && txs <= lv.px_w + 40; txs += dir * QX)
                 for (int kind = K_FALL; kind <= K_DOUBLE + 8; kind++)
                     for (int air_same = 1; air_same >= 0; air_same--) {
                         int kk = kind >= K_DOUBLE ? K_DOUBLE : kind;
@@ -222,6 +243,8 @@ int main(int argc, char **argv)
                         if (!hit && (seen(ox, oy) || nnodes >= MAX_NODES - 1))
                             continue;
                         nodes[nnodes].p = res;
+                        if (game_mode)
+                            nodes[nnodes].g = sim;
                         nodes[nnodes].parent = head;
                         memcpy(nodes[nnodes].move, move, sizeof move);
                         if (hit) {

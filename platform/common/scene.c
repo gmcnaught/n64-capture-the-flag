@@ -9,7 +9,7 @@
 
 static const char *const sprite_names[SPR_COUNT] = {
     "tiles", "p1", "p2", "jumppad", "flag", "sky", "scenery", "hud", "fruit", "font", "slash",
-    "controls",
+    "controls", "platform",
 };
 
 void scene_sheet_name(int spr, int backdrop, int tileset, char *out, int size)
@@ -40,6 +40,10 @@ int scene_tileset(const Level *lv)
                                 /* "scenery" sheets are the whole screen, 640 x 240 */
 #define HEART_W 16              /* full, 3/4, 1/2, empty */
 #define HEART_H 8
+#define CLOUD_W 68              /* "platform": clouds 2, 3, 4 cells wide, one 68x10 slot each, */
+#define CLOUD_H 10              /* centered, top on the slot's top row */
+#define CLOUD_CELLS_MAX 4
+#define CLOUD_RISE 1            /* cloud top above the platform's top edge (bumps) */
 
 static void tile(const DrawApi *d, uint16_t t, int x, int y)
 {
@@ -106,6 +110,30 @@ static void draw_goals(const Game *g, const DrawApi *d)
 }
 
 /* ---- objects -------------------------------------------------------------- */
+
+/* Moving platforms: a one-way one is clouds (one per CLOUD_CELLS_MAX
+ * cells), a solid one a block of the level's terrain tiles. */
+static void draw_platforms(const Game *g, const DrawApi *d)
+{
+    for (int i = 0; i < g->platform_count; i++) {
+        const Solid *s = &g->lv.solids[i];
+        int cw = s->w / TILE_W, ch = s->h / TILE_H;
+        if (s->oneway) {
+            for (int c = 0; c < cw; c += CLOUD_CELLS_MAX) {
+                int n = cw - c < CLOUD_CELLS_MAX ? cw - c : CLOUD_CELLS_MAX;
+                int f = n < 2 ? 0 : n - 2;
+                d->blit(d->ctx, SPR_PLATFORM, f * CLOUD_W, 0, CLOUD_W, CLOUD_H,
+                        s->x + c * TILE_W + n * TILE_W / 2 - CLOUD_W / 2, s->y - CLOUD_RISE, 0);
+            }
+            continue;
+        }
+        for (int y = 0; y < ch; y++)
+            for (int x = 0; x < cw; x++) {
+                int sides = (y > 0) | (x < cw - 1) << 1 | (y < ch - 1) << 2 | (x > 0) << 3;
+                tile(d, tileset_rect_tiles[sides], s->x + x * TILE_W, s->y + y * TILE_H);
+            }
+    }
+}
 
 /* A carried flag is held up: pole on the carrier's center line, base
  * hidden behind them, cloth above their head. Render only: the sim keeps
@@ -624,6 +652,12 @@ static void draw_debug(const Game *g, const DrawApi *d)
                 TILE_H - PAD_HIT_Y, 0xffa000ff);
     for (int i = 0; i < g->flag_count; i++)
         outline(d, g->flags[i].body.x, g->flags[i].body.y, FLAG_W, FLAG_H, 0xffff60ff);
+    for (int i = 0; i < g->platform_count; i++) {
+        const Platform *pl = &g->platforms[i];
+        const Solid *s = &g->lv.solids[i];
+        outline(d, s->x, s->y, s->w, s->h, s->oneway ? 0x9fb4d8ff : 0xe8f0ffff);
+        outline(d, pl->x1, pl->y1, s->w, s->h, 0xffffff60);  /* far end of the path */
+    }
     for (int t = 0; t < TEAM_COUNT; t++) {
         const Player *p = &g->players[t];
         const Body *b = &p->body;
@@ -647,6 +681,7 @@ void scene_draw_background(const Game *g, const DrawApi *d)
 
 void scene_draw(const Game *g, const DrawApi *d, int debug)
 {
+    draw_platforms(g, d);
     draw_flags(g, d);
     draw_pads(g, d);
     draw_player(g, d, 1, SPR_P2);

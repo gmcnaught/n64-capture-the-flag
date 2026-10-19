@@ -37,6 +37,9 @@ Layouts below are in art px (before the stretch):
             frames of 24x16
   controls  N64 controller picture for the CONTROLS screen (tools/controls.py),
             128x84
+  platform  Rocky Roads cloud platforms halved (nearest), for one-way moving
+            platforms 2, 3 and 4 cells wide: one 34x10 slot each, the cloud
+            centered, its top on the slot's top row
 """
 import colorsys
 import os
@@ -147,6 +150,23 @@ def sheets():
     yield "font", font.sheet()
     yield "slash", effects.slash()
     yield "controls", controls.pad()
+    yield "platform", clouds()
+
+
+# Cloud bounding boxes in Objects/cloud_platforms.png (source px), for one-way
+# platforms 2, 3 and 4 cells (16, 24, 32 art px) wide.
+CLOUDS = [(111, 63, 34, 13), (111, 111, 50, 14), (15, 158, 66, 18)]
+CLOUD_SLOT = (34, 10)
+
+
+def clouds():
+    src = load(os.path.join(ROCKY, "Objects", "cloud_platforms.png"))
+    out = Image.new("RGBA", (CLOUD_SLOT[0] * len(CLOUDS), CLOUD_SLOT[1]))
+    for i, (x, y, w, h) in enumerate(CLOUDS):
+        im = src.crop((x, y, x + w, y + h))
+        im = im.resize((w // 2, h // 2), Image.NEAREST)
+        out.paste(im, (i * CLOUD_SLOT[0] + (CLOUD_SLOT[0] - im.width) // 2, 0))
+    return out
 
 
 def main():

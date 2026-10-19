@@ -37,12 +37,19 @@ Red against blue in one arena. Each team keeps three flags by its start.
 
 Every round starts with a 3, 2, 1, GO! countdown. Press Start to pause; the
 pause menu has a CONTROLS screen. Pick the stage (Arena, Forest, Desert,
-Snow, Lava) and the background on the title screen with up/down and
+Snow, Lava, Sky) and the background on the title screen with up/down and
 left/right. On Snow, the pale blue ground is ice: you speed up and slow
 down slowly there, so a dash or a run slides on. On Desert, a dust storm
 hangs over each of the two long side platforms and every few seconds
 blows outward, pushing players and dropped flags off toward the walls;
-the dust thickens and a whoosh sounds just before it blows.
+the dust thickens and a whoosh sounds just before it blows. On Sky,
+platforms move: clouds slide along the sides and carry whoever stands on
+them (jump up through them, drop down with Down + A); a block in the
+middle goes up and down between the top and the middle landing, a lift
+for anyone on top and a crusher for anyone under it; two low blocks
+slide to the pillar and back, shoving players aside. A player crushed
+against a wall or floor goes back to its start without losing a heart,
+dropping any flag it carries.
 
 ## Controls
 

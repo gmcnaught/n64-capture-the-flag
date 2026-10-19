@@ -8,4 +8,8 @@
 
 static const char *const tileset_sheets[TILESET_COUNT] = {"tiles_arena", "tiles_rocky_forest", "tiles_rocky_desert", "tiles_rocky_snow", "tiles_rocky_lava"};
 
+/* Tile of a solid cell in a solid rectangle (moving platforms), by which
+ * sides the rectangle goes on: bit 0 up, 1 right, 2 down, 3 left. */
+static const unsigned char tileset_rect_tiles[16] = {0, 1, 2, 16, 4, 5, 20, 24, 8, 34, 10, 38, 26, 42, 31, 46};
+
 #endif

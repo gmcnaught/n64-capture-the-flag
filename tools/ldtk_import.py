@@ -25,7 +25,12 @@ Level rules (errors stop the import):
     MAX_WINDS Wind zones, fields Force (px/frame, as the tuning values),
     Cycle and Gust (frames, Cycle > Gust + WIND_WARN, Gust > 2 *
     WIND_RAMP), Phase (frames, < 8192), Alternate and Dust: core/level.h
-    ENT_WIND);
+    ENT_WIND); up to MAX_PLATFORMS Platform boxes, fields End (Point: the
+    top-left cell at the other end), Speed (px/frame along the longer
+    axis, sim px; 0-8), OneWay (bool), Phase (frames, < 32768): core/level.h
+    ENT_PLATFORM. A platform's path (the box swept from its start to End)
+    must not cross solid cells, and no start, flag, goal or fruit spot may
+    overlap it;
   - optional level fields: Music (Int), Backdrop (String, a
     tools/scenery.py BACKDROPS name, default forest), Tileset (String, a
     tools/terrain.py TILESETS name, default arena).
@@ -42,9 +47,10 @@ import terrain
 GRID = 8
 XS = 2                                  # sim px per art px, horizontally
 ENTITY_TYPES = {"P1Start": 1, "P2Start": 2, "JumpPad": 3, "Flag1": 4, "Flag2": 5, "Goal1": 6,
-                "Goal2": 7, "FruitSpot": 8, "Wind": 9}
+                "Goal2": 7, "FruitSpot": 8, "Wind": 9, "Platform": 10}
 UNIQUE = {"P1Start", "P2Start", "Goal1", "Goal2"}
 WIND_WARN, WIND_RAMP, MAX_WINDS = 60, 20, 4     # core/game.h
+MAX_PLATFORMS = 8                       # core/game.h
 MAX_FLAGS = 3                           # per team (core/game.h FLAGS_PER_TEAM)
 TILE_EMPTY = 0xFFFF
 FLAG_NONE = 0xFFFF
@@ -93,7 +99,7 @@ def convert(level):
             for y in range(h) for x in range(w)]
     tile_layers = [[TILE_EMPTY if t is None else t for t in grid]]
 
-    entities, seen = [], set()
+    entities, seen, paths = [], set(), []
     for li in layers:
         for e in li["entityInstances"]:
             ident = e["__identifier"]
@@ -121,9 +127,39 @@ def convert(level):
                     errors.append(f"Wind Phase {phase}: 0-8191")
                 flags = (1 if ef["Alternate"] else 0) | (2 if ef.get("Dust") else 0) | phase << 2
                 rec = rec[:5] + (gust, flags, force, cycle)
+            if ident == "Platform":
+                ef = fields(e)
+                end, phase = ef.get("End"), ef.get("Phase") or 0
+                speed = round((ef.get("Speed") or 0) * 256)
+                if end is None:
+                    errors.append(f"Platform at cell {x // GRID},{y // GRID}: no End")
+                    end = {"cx": x // GRID, "cy": y // GRID}
+                if not 0 < speed < 8 * 256:
+                    errors.append(f"Platform Speed {ef.get('Speed')}: above 0, under 8")
+                if not 0 <= phase < 0x8000:
+                    errors.append(f"Platform Phase {phase}: 0-32767")
+                x2, y2 = end["cx"] * GRID, end["cy"] * GRID
+                rec = rec[:5] + (x2 * XS, y2, speed, (1 if ef.get("OneWay") else 0) | phase << 1)
+                swept = (min(x, x2), min(y, y2), max(x, x2) + e["width"], max(y, y2) + e["height"])
+                for cy in range(swept[1] // GRID, (swept[3] + GRID - 1) // GRID):
+                    for cx in range(swept[0] // GRID, (swept[2] + GRID - 1) // GRID):
+                        if cell(cx, cy) == 1:
+                            errors.append(f"Platform at cell {x // GRID},{y // GRID}: path "
+                                          f"crosses solid cell {cx},{cy}")
+                paths.append(swept)
             entities.append(rec)
     if sum(1 for e in entities if e[0] == ENTITY_TYPES["Wind"]) > MAX_WINDS:
         errors.append(f"more than {MAX_WINDS} Wind zones")
+    if len(paths) > MAX_PLATFORMS:
+        errors.append(f"more than {MAX_PLATFORMS} Platforms")
+    for e in entities:
+        if e[0] in (ENTITY_TYPES["Wind"], ENTITY_TYPES["Platform"], ENTITY_TYPES["JumpPad"]):
+            continue
+        ex, ey, ew, eh = e[1] // XS, e[2], e[3] // XS, e[4]
+        for px0, py0, px1, py1 in paths:
+            if ex < px1 and ex + ew > px0 and ey < py1 and ey + eh > py0:
+                kind = next(k for k, v in ENTITY_TYPES.items() if v == e[0])
+                errors.append(f"{kind} at cell {ex // GRID},{ey // GRID} on a Platform's path")
     for ident in ("Flag1", "Flag2"):
         n = sum(1 for e in entities if e[0] == ENTITY_TYPES[ident])
         if n > MAX_FLAGS:

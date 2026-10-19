@@ -59,6 +59,9 @@ enum {
                          * force (Q8.8 px/frame, sign = first direction), flag cycle
                          * length and x2 gust length (frames), y2 bit 0 direction
                          * alternates, bit 1 drawn as dust, bits 2-14 phase (frames) */
+    ENT_PLATFORM = 10,  /* moving solid, w x h, from (x, y) to (x2, y2) and back (core/game.h
+                         * Platform): param speed (Q8.8 px/frame along the longer axis),
+                         * flag bit 0 one-way, bits 1-15 phase (frames into its cycle) */
 };
 
 /* Surfaces: what a solid or one-way cell's top is made of. */
@@ -86,11 +89,23 @@ typedef struct {
     uint16_t flag;
 } LevelEntity;
 
+/* Axis-aligned solid box that is not a cell: a moving platform, or the other
+ * player. A one-way box only stops downward movement onto its top edge (as
+ * CELL_ONEWAY); an inactive one is skipped. */
+typedef struct {
+    int16_t x, y, w, h;
+    uint8_t active, oneway;
+} Solid;
+
+/* Moving platforms, plus the other player (core/game.c). */
+#define LEVEL_MAX_SOLIDS 9
+
 typedef struct Level {
     uint16_t cell_w, cell_h;
-    /* One extra solid box (the other player, set by core/game.c around each
-     * player_tick); solid_w == 0 means none. */
-    int16_t solid_x, solid_y, solid_w, solid_h;
+    /* Solid boxes besides the cells, set by core/game.c (kept in the Level,
+     * so a copied Game keeps them). */
+    Solid solids[LEVEL_MAX_SOLIDS];
+    uint8_t solid_count;
     int16_t px_w, px_h;
     uint16_t layer_count, entity_count;
     uint8_t weather, music, backdrop, tileset;
@@ -117,7 +132,7 @@ void level_entity(const Level *lv, int i, LevelEntity *out);
 uint16_t level_tile(const Level *lv, int layer, int cx, int cy);
 
 /* Box queries, sim px, box = [x, x+w) x [y, y+h). level_box_solid also
- * tests the extra solid box. */
+ * tests the active solid boxes that are not one-way. */
 int level_box_solid(const Level *lv, int x, int y, int w, int h);
 int level_box_has(const Level *lv, int x, int y, int w, int h, uint8_t cell);
 

@@ -17,7 +17,7 @@
  * SPR_SCENERY in one pair per backdrop: the platform reloads them when
  * Game.lv.tileset or Game.backdrop changes. */
 enum { SPR_TILES, SPR_P1, SPR_P2, SPR_PAD, SPR_FLAG, SPR_SKY, SPR_SCENERY, SPR_HUD, SPR_FRUIT, SPR_FONT,
-       SPR_SLASH, SPR_CONTROLS, SPR_COUNT };
+       SPR_SLASH, SPR_CONTROLS, SPR_PLATFORM, SPR_COUNT };
 
 /* File name (no extension) of sheet spr; tileset (Level.tileset) applies
  * to SPR_TILES only, backdrop (BACKDROP_*) to SPR_SKY and SPR_SCENERY. */
@@ -56,8 +56,8 @@ void scene_draw_sky(const Game *g, const DrawApi *d);
  * layers, goal stands), over the sky with transparent gaps: the N64 draws
  * them once per level into a buffer and copies it every frame. */
 void scene_draw_background(const Game *g, const DrawApi *d);
-/* Everything else, over the background. debug: collision overlay and
- * hitboxes. */
+/* Everything else (moving platforms first), over the background. debug:
+ * collision overlay and hitboxes. */
 void scene_draw(const Game *g, const DrawApi *d, int debug);
 
 #endif

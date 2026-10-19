@@ -84,9 +84,12 @@ uint16_t level_tile(const Level *lv, int layer, int cx, int cy)
 
 int level_box_solid(const Level *lv, int x, int y, int w, int h)
 {
-    if (lv->solid_w && x < lv->solid_x + lv->solid_w && x + w > lv->solid_x &&
-        y < lv->solid_y + lv->solid_h && y + h > lv->solid_y)
-        return 1;
+    for (int i = 0; i < lv->solid_count; i++) {
+        const Solid *s = &lv->solids[i];
+        if (s->active && !s->oneway && x < s->x + s->w && x + w > s->x && y < s->y + s->h &&
+            y + h > s->y)
+            return 1;
+    }
     return level_box_has(lv, x, y, w, h, CELL_SOLID);
 }
 

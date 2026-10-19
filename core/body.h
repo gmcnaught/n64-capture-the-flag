@@ -18,8 +18,9 @@ typedef struct {
  * remainder on that axis is then zeroed; the caller zeroes velocity). */
 int body_move_x(Body *b, fx amount, const Level *lv);
 
-/* As body_move_x. When platforms is nonzero, one-way platforms and ladder
- * tops also stop downward movement onto their top edge. */
+/* As body_move_x. When platforms is nonzero, one-way platforms (cells and
+ * solid boxes) and ladder tops also stop downward movement onto their top
+ * edge. */
 int body_move_y(Body *b, fx amount, const Level *lv, int platforms);
 
 /* Is there something to stand on one px below the body? */

@@ -58,6 +58,23 @@ Every scenario first waits out the round countdown (3, 2, 1, GO!).
   desert_capture  capture on the Desert stage: routes are followed between
                 gusts (route, wait_out_gust), so each team can win there.
   desert_capture_blue  capture_blue on the Desert stage.
+  platform_ride  Sky stage. P1 lands on the left cloud (one-way, sliding
+                along row 18) and is carried at least 48 px standing still;
+                P2 waits on the right row 12 slab for the middle block (solid,
+                going between the top and the middle landing), steps onto it
+                at the bottom and rides it up 72 px to the top.
+  platform_squish  Sky stage. P1 stands on the middle landing until the
+                middle block comes down: squished, P1 is back at its start
+                with all pips. P2 takes a red flag and does the same: the flag
+                drops and P2 is back at its start with all pips; the flag
+                still lies there when the block has gone up again.
+  platform_push  Sky stage. P1 stands on the bump left of the pillar; the
+                left row 24 block (solid, sliding to the pillar and back)
+                pushes it at least 16 px, off the bump onto the floor.
+  sky_capture   capture on the Sky stage: routes include riding the
+                platforms (routefind runs the whole game there), so each
+                team can win.
+  sky_capture_blue  capture_blue on the Sky stage.
 """
 import re
 import os
@@ -95,8 +112,9 @@ def countdown(b):
 
 
 def at_rest(b, side):
-    return b.hold(inp(side, ""), until=lambda s: s.p[side].vx == 0 and s.p[side].grounded,
-                  limit=90)
+    """Stand until at rest, or a round is won (everything stops for the banner)."""
+    return b.hold(inp(side, ""), until=lambda s: (s.p[side].vx == 0 and s.p[side].grounded) or
+                  s.p[side].winner, limit=90)
 
 
 def find_route(b, side, target):
@@ -245,6 +263,84 @@ def wind_drop():
     check(s.p[0].dfx >= 0 and x - s.p[0].dfx >= 20, "dropped flag not blown left", s)
     b.hold("C / C", 30)
     return b
+
+
+SKY = NO_FRUIT.replace("arena.lvl", "sky.lvl")
+# Sky stage: Game.platforms indices (entity order: y, then x) and where a
+# player stands (body top-left y) on its parts.
+CRUSHER, LEFT_CLOUD, RIGHT_CLOUD, LEFT_PUSHER = 0, 1, 2, 3
+CRUSHER_TOP_Y, CRUSHER_LOW_Y = 24, 96     # the middle block's ends (its top edge)
+LANDING_Y, CLOUD_Y, BUMP_Y, FLOOR_Y = 96, 128, 192, 200
+
+
+def platform_ride():
+    b = Builder(SKY)
+    countdown(b)
+    b.hold("C / C", 10)
+    s = route(b, 0, f"rest:32,200,{CLOUD_Y}")
+    check(s.p[0].ride == LEFT_CLOUD, "P1 not on the left cloud", s)
+    x = s.p[0].x
+    s = b.hold("C / C", until=lambda s: abs(s.p[0].x - x) >= 48 or s.p[0].ride != LEFT_CLOUD,
+               limit=300)
+    check(s.p[0].ride == LEFT_CLOUD and s.p[0].y == CLOUD_Y, "P1 not carried by the cloud", s)
+    route(b, 1, "rest:352,360,80")                          # right row 12 slab
+    b.hold("C / C", until=lambda s: s.p[0].ply != CRUSHER_LOW_Y, limit=400)
+    b.hold("C / C", until=lambda s: s.p[0].ply == CRUSHER_LOW_Y, limit=400)
+    s = b.hold("C / LC", until=lambda s: s.p[1].ride == CRUSHER, limit=30)
+    s = b.hold("C / C", until=lambda s: s.p[1].y == CRUSHER_TOP_Y - 16, limit=200)
+    check(s.p[1].ride == CRUSHER, "P2 not carried up by the middle block", s)
+    b.hold("C / C", 30)
+    return b
+
+
+def squished(b, side, home):
+    """Player side stands on the middle landing until the middle block
+    comes down on it: back at its start (home) with all pips."""
+    s = route(b, side, f"rest:296,320,{LANDING_Y}")
+    hp = s.p[side].hp
+    s = b.hold("C / C", until=lambda s: s.p[side].y != LANDING_Y, limit=400)
+    check((s.p[side].x, s.p[side].y) == home and s.p[side].hp == hp,
+          f"P{side + 1} not squished back to its start", s)
+    return s
+
+
+def platform_squish():
+    b = Builder(SKY)
+    first = b.hold("C / C", 1)
+    countdown(b)
+    b.hold("C / C", 10)
+    home = [(first.p[t].x, first.p[t].y) for t in range(2)]
+    squished(b, 0, home[0])
+    b.hold("C / C", 20)
+    s = route(b, 1, f"flag:{FLAGS[0][0]}", done=lambda s: s.p[1].flag >= 0)
+    check(s.p[1].flag in FLAGS[0], "P2 took no red flag", s)
+    s = squished(b, 1, home[1])
+    check(s.p[1].flag < 0 and s.p[1].dfx >= 0, "carrier's flag not dropped", s)
+    x = s.p[1].dfx
+    s = b.hold("C / C", until=lambda s: s.p[0].ply < CRUSHER_LOW_Y - 32, limit=200)
+    check(s.p[1].dfx == x, "dropped flag moved by the middle block", s)
+    b.hold("C / C", 30)
+    return b
+
+
+def platform_push():
+    b = Builder(SKY)
+    countdown(b)
+    b.hold("C / C", 10)
+    s = route(b, 0, f"rest:208,215,{BUMP_Y}")
+    x = s.p[0].x
+    s = b.hold("C / C", until=lambda s: s.p[0].y == FLOOR_Y and s.p[0].grounded, limit=400)
+    check(abs(s.p[0].x - x) >= 16, "P1 not pushed off the bump", s)
+    b.hold("C / C", 30)
+    return b
+
+
+def sky_capture():
+    return capture_team(0, "sky.lvl")
+
+
+def sky_capture_blue():
+    return capture_team(1, "sky.lvl")
 
 
 def capture_team(side, level="arena.lvl"):
@@ -487,7 +583,8 @@ def main():
     docs = __doc__.split("\n  ")
     scenarios = (capture, capture_blue, steal_drop, duel, stack, water, menu, ice_slide,
                  snow_capture, snow_capture_blue, wind_gust, wind_drop, desert_capture,
-                 desert_capture_blue)
+                 desert_capture_blue, platform_ride, platform_squish, platform_push, sky_capture,
+                 sky_capture_blue)
     names = sys.argv[1:]
     for fn in scenarios:
         if names and fn.__name__ not in names:

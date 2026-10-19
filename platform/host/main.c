@@ -138,6 +138,17 @@ static int dropped_flag_x(const Game *g)
     return -1;
 }
 
+/* Index of the moving platform a body stands on, or -1 (trace). */
+static int riding(const Game *g, const Body *b)
+{
+    for (int i = 0; i < g->platform_count; i++) {
+        const Solid *s = &g->lv.solids[i];
+        if (b->y + b->h == s->y && b->x < s->x + s->w && b->x + b->w > s->x)
+            return i;
+    }
+    return -1;
+}
+
 static int run_headless(const char *path, int check, int update, long max_frames, int trace)
 {
     Replay r;
@@ -155,7 +166,8 @@ static int run_headless(const char *path, int check, int update, long max_frames
                 const Player *p = &g.players[t];
                 printf("%lu P%d x %d y %d vx %.3f vy %.3f st %d gnd %d hp %d atk %d dead %d "
                        "flag %d wins %d winner %d fruit %d spot %d water %d caught %d "
-                       "title %d paused %d menu %d wfx %d wfy %d rx %ld cd %d wind %.4f wdir %d calm %u dfx %d\n",
+                       "title %d paused %d menu %d wfx %d wfy %d rx %ld cd %d wind %.4f wdir %d calm %u dfx %d "
+                       "ride %d ply %d\n",
                        (unsigned long)g.frame, t + 1, p->body.x, p->body.y, p->body.vx / 65536.0,
                        p->body.vy / 65536.0, p->state, p->grounded, p->health, p->attack_timer,
                        p->dead, g.carrying[t], g.wins[t], g.winner, g.fruit_active,
@@ -163,7 +175,8 @@ static int run_headless(const char *path, int check, int update, long max_frames
                        g.water_len ? g.water_cx[0] : -1, g.water_len ? g.water_cy[0] : -1,
                        (long)p->body.rem_x, g.countdown, p->push_x / 65536.0,
                        g.wind_count ? g.winds[0].dir : 0,
-                       (unsigned)game_wind_calm(&g), dropped_flag_x(&g));
+                       (unsigned)game_wind_calm(&g), dropped_flag_x(&g), riding(&g, &p->body),
+                       g.platform_count ? g.lv.solids[0].y : -1);
             }
     }
     uint32_t hash = game_hash(&g);

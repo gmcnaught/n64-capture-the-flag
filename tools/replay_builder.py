@@ -18,7 +18,9 @@ spot index), water (stream length, 0 = none), caught (in the water),
 title (title screen), paused, menu (pause menu cursor), wfx/wfy (water
 front cell, -1 without water), rx (sub-pixel x remainder, Q16.16), cd
 (countdown), wind (push, px/frame), wdir (gust direction), calm (frames
-to the next gust), dfx (x of a dropped flag, -1 none).
+to the next gust), dfx (x of a dropped flag, -1 none), ride (index of the
+moving platform the player stands on, -1 none), ply (y of moving platform
+0, -1 none).
 Conditions are checked on the state after
 each frame of the new run.
 """
@@ -33,7 +35,7 @@ LINE = re.compile(r"^(\d+) P(\d) x (-?\d+) y (-?\d+) vx (\S+) vy (\S+) st (\d+) 
                   r"hp (\d+) atk (\d+) dead (\d+) flag (-?\d+) wins (\d+) winner (\d+) "
                   r"fruit (\d+) spot (\d+) water (\d+) caught (\d+) "
                   r"title (\d+) paused (\d+) menu (\d+) wfx (-?\d+) wfy (-?\d+) rx (-?\d+) cd (\d+) "
-                  r"wind (\S+) wdir (-?\d+) calm (\d+) dfx (-?\d+)")
+                  r"wind (\S+) wdir (-?\d+) calm (\d+) dfx (-?\d+) ride (-?\d+) ply (-?\d+)")
 
 
 class PlayerState:
@@ -53,6 +55,8 @@ class PlayerState:
         self.wdir = int(g[26])          # direction of the first zone's current or next gust
         self.calm = int(g[27])          # frames until any zone's next gust (0 blowing, 65535 none)
         self.dfx = int(g[28])           # x of the first dropped flag, -1 none
+        self.ride = int(g[29])          # Game.platforms index stood on, -1 none
+        self.ply = int(g[30])           # y of platform 0, -1 none
 
     def __repr__(self):
         return (f"x {self.x} y {self.y} vx {self.vx} vy {self.vy} st {self.st} "
@@ -60,7 +64,8 @@ class PlayerState:
                 f"flag {self.flag} wins {self.wins} winner {self.winner} fruit {self.fruit} "
                 f"spot {self.spot} water {self.water} caught {int(self.caught)} "
                 f"title {int(self.title)} paused {self.paused} menu {self.menu} cd {self.cd} "
-                f"wind {self.wind} wdir {self.wdir} calm {self.calm} dfx {self.dfx}")
+                f"wind {self.wind} wdir {self.wdir} calm {self.calm} dfx {self.dfx} "
+                f"ride {self.ride} ply {self.ply}")
 
 
 class State:

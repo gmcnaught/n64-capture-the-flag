@@ -24,10 +24,16 @@ int body_move_x(Body *b, fx amount, const Level *lv)
     return 0;
 }
 
-/* Would moving down one px land on a platform's top edge? */
+/* Would moving down one px land on a platform's top edge (a one-way cell,
+ * a ladder top or a one-way solid box)? */
 static int platform_below(const Body *b, const Level *lv)
 {
     int bottom = b->y + b->h;              /* first px row below the body */
+    for (int i = 0; i < lv->solid_count; i++) {
+        const Solid *s = &lv->solids[i];
+        if (s->active && s->oneway && bottom == s->y && b->x < s->x + s->w && b->x + b->w > s->x)
+            return 1;
+    }
     if (bottom & (TILE_H - 1))
         return 0;
     int cy = bottom >> TILE_SHIFT_Y;

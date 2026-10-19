@@ -1,0 +1,12 @@
+# platform_push Sky stage. P1 stands on the bump left of the pillar; the
+level sky.lvl
+abilities 7
+tune fruit_min 0x0000ea60
+232 C / C
+3 LC / C
+36 LJC / C
+6 C / C
+6 RC / C
+108 C / C
+hash 68f12c95
+kos 0 0
