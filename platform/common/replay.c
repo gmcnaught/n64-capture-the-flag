@@ -16,10 +16,11 @@ void replay_init(Replay *r, const char *level, uint8_t abilities, const PlayerTu
     memset(r, 0, sizeof *r);
     snprintf(r->level, sizeof r->level, "%s", level);
     r->abilities = abilities;
+    r->players = TEAM_COUNT;
     r->tuning = *t;
 }
 
-void replay_push(Replay *r, const InputState *p1, const InputState *p2)
+void replay_push(Replay *r, const InputState in[MAX_PLAYERS])
 {
     if (r->count == r->cap) {
         r->cap = r->cap ? r->cap * 2 : 4096;
@@ -30,8 +31,8 @@ void replay_push(Replay *r, const InputState *p1, const InputState *p2)
         }
     }
     ReplayFrame *f = &r->frames[r->count++];
-    f->in[0] = *p1;
-    f->in[1] = p2 ? *p2 : (InputState){0, 0, 0};
+    for (int i = 0; i < MAX_PLAYERS; i++)
+        f->in[i] = in[i];
 }
 
 void replay_free(Replay *r)
@@ -81,7 +82,7 @@ int replay_load(Replay *r, const char *path)
     while (fgets(line, sizeof line, f)) {
         lineno++;
         char a[64], b[64];
-        long n, n2;
+        long n, k[MAX_PLAYERS];
         int off = 0;
         if (line[0] == '#') {
             size_t used = strlen(r->comments);
@@ -95,6 +96,10 @@ int replay_load(Replay *r, const char *path)
             continue;
         if (sscanf(line, "abilities %ld", &n) == 1) {
             r->abilities = (uint8_t)n;
+            continue;
+        }
+        if (sscanf(line, "players %ld", &n) == 1) {
+            r->players = (uint8_t)(n > MAX_PLAYERS ? MAX_PLAYERS : n < TEAM_COUNT ? TEAM_COUNT : n);
             continue;
         }
         if (sscanf(line, "tune %63s %63s", a, b) == 2) {
@@ -115,27 +120,31 @@ int replay_load(Replay *r, const char *path)
             r->hash = (uint32_t)strtoul(a, NULL, 16);
             continue;
         }
-        if (sscanf(line, "kos %ld %ld", &n, &n2) == 2) {
+        int nk = sscanf(line, "kos %ld %ld %ld %ld", &k[0], &k[1], &k[2], &k[3]);
+        if (nk >= 2) {
             r->has_kos = 1;
-            r->kos[0] = (int)n;
-            r->kos[1] = (int)n2;
+            for (int i = 0; i < MAX_PLAYERS; i++)
+                r->kos[i] = i < nk ? (int)k[i] : 0;
             continue;
         }
         if (sscanf(line, "%ld %n", &n, &off) == 1 && n > 0) {
-            InputState in[2] = {{0, 0, 0}, {0, 0, 0}};
-            char *slash = strchr(line + off, '/');
-            if (slash)
-                *slash = 0;
-            int bad = parse_input(line + off, &in[0]);
-            if (!bad && slash)
-                bad = parse_input(slash + 1, &in[1]);
+            InputState in[MAX_PLAYERS] = {{0, 0, 0}};
+            int bad = 0;
+            char *group = line + off;
+            for (int i = 0; i < MAX_PLAYERS && group && !bad; i++) {
+                char *slash = strchr(group, '/');
+                if (slash)
+                    *slash = 0;
+                bad = parse_input(group, &in[i]);
+                group = slash ? slash + 1 : NULL;
+            }
             if (bad) {
                 fprintf(stderr, "%s:%d: unknown button '%c'\n", path, lineno, bad);
                 fclose(f);
                 return 1;
             }
             while (n--)
-                replay_push(r, &in[0], &in[1]);
+                replay_push(r, in);
             continue;
         }
         fprintf(stderr, "%s:%d: cannot parse: %s", path, lineno, line);
@@ -162,13 +171,23 @@ static void write_input(FILE *f, const InputState *in)
         fprintf(f, "%s", buttons);
 }
 
+static int input_used(const InputState *in)
+{
+    return in->buttons || in->stick_x || in->stick_y;
+}
+
+/* One line: P1's input, then the others up to the last one in use. */
 static void write_run(FILE *f, long n, const ReplayFrame *fr)
 {
+    int last = 0;
+    for (int i = 1; i < MAX_PLAYERS; i++)
+        if (input_used(&fr->in[i]))
+            last = i;
     fprintf(f, "%ld ", n);
-    write_input(f, &fr->in[0]);
-    if (fr->in[1].buttons || fr->in[1].stick_x || fr->in[1].stick_y) {
-        fputs(" / ", f);
-        write_input(f, &fr->in[1]);
+    for (int i = 0; i <= last; i++) {
+        if (i)
+            fputs(" / ", f);
+        write_input(f, &fr->in[i]);
     }
     fputc('\n', f);
 }
@@ -184,6 +203,8 @@ int replay_save(const Replay *r, const char *path)
     tuning_defaults(&d);
     fputs(r->comments[0] ? r->comments : "# n64-capture-the-flag replay (platform/common/replay.h)\n", f);
     fprintf(f, "level %s\n", r->level);
+    if (r->players != TEAM_COUNT)
+        fprintf(f, "players %u\n", r->players);
     fprintf(f, "abilities %u\n", r->abilities);
     for (int i = 0; i < tuning_field_count; i++) {
         int32_t v = *tuning_field((PlayerTuning *)&r->tuning, i);
@@ -200,12 +221,18 @@ int replay_save(const Replay *r, const char *path)
     }
     if (r->has_hash)
         fprintf(f, "hash %08lx\n", (unsigned long)r->hash);
-    if (r->has_kos)
-        fprintf(f, "kos %d %d\n", r->kos[0], r->kos[1]);
+    if (r->has_kos) {
+        fprintf(f, "kos");
+        for (int i = 0; i < r->players; i++)
+            fprintf(f, " %d", r->kos[i]);
+        fputc('\n', f);
+    }
     return fclose(f) ? 1 : 0;
 }
 
 void replay_start(const Replay *r, Game *g, const Level *lv)
 {
     game_init(g, lv, &r->tuning, r->abilities);
+    if (r->players != TEAM_COUNT)
+        game_set_players(g, r->players);
 }

@@ -11,10 +11,11 @@ LDtk works in square art px on an 8 px grid. The game draws each art px 2
 sim px wide (640x240, core/level.h), so entity x and width are doubled;
 cells, tiles and y are unchanged.
 
-The level's one tile layer is made from the Collision grid with the
+The level's tile layer is made from the Collision grid with the
 level's tileset (tools/terrain.py tile_index: corners, edges and fill
-from each cell's neighbors). LDtk's own tile layers are for the editor
-view only and are not read.
+from each cell's neighbors); a level with geysers gets a second layer
+with spout tiles on the solid cells under each Geyser (terrain.VENT_*).
+LDtk's own tile layers are for the editor view only and are not read.
 
 Level rules (errors stop the import):
   - 8 px grid; one IntGrid layer named "Collision" (values 1-4);
@@ -22,10 +23,10 @@ Level rules (errors stop the import):
     cells: the high nibble of each cell (core/level.h SURFACE_*);
   - entities: see ENTITY_TYPES (at most one start and goal per team, up
     to MAX_FLAGS flags per team; goals are resizable zones; up to
-    MAX_WINDS Wind zones, fields Force (px/frame, as the tuning values),
-    Cycle and Gust (frames, Cycle > Gust + WIND_WARN, Gust > 2 *
-    WIND_RAMP), Phase (frames, < 8192), Alternate and Dust: core/level.h
-    ENT_WIND); up to MAX_PLATFORMS Platform boxes, fields End (Point: the
+    MAX_WINDS Wind and Geyser zones together, fields Force (px/frame, as
+    the tuning values; a Geyser's is px/frame^2 upward, above 0), Cycle and
+    Gust (frames, Cycle > Gust + WIND_WARN, Gust > 2 * WIND_RAMP), Phase
+    (frames, < 8192), Wind also Alternate and Dust: core/level.h ENT_WIND); up to MAX_PLATFORMS Platform boxes, fields End (Point: the
     top-left cell at the other end), Speed (px/frame along the longer
     axis, sim px; 0-8), OneWay (bool), Phase (frames, < 32768): core/level.h
     ENT_PLATFORM. A platform's path (the box swept from its start to End)
@@ -47,7 +48,7 @@ import terrain
 GRID = 8
 XS = 2                                  # sim px per art px, horizontally
 ENTITY_TYPES = {"P1Start": 1, "P2Start": 2, "JumpPad": 3, "Flag1": 4, "Flag2": 5, "Goal1": 6,
-                "Goal2": 7, "FruitSpot": 8, "Wind": 9, "Platform": 10}
+                "Goal2": 7, "FruitSpot": 8, "Wind": 9, "Platform": 10, "Geyser": 9}
 UNIQUE = {"P1Start", "P2Start", "Goal1", "Goal2"}
 WIND_WARN, WIND_RAMP, MAX_WINDS = 60, 20, 4     # core/game.h
 MAX_PLATFORMS = 8                       # core/game.h
@@ -99,7 +100,7 @@ def convert(level):
             for y in range(h) for x in range(w)]
     tile_layers = [[TILE_EMPTY if t is None else t for t in grid]]
 
-    entities, seen, paths = [], set(), []
+    entities, seen, paths, geysers = [], set(), [], []
     for li in layers:
         for e in li["entityInstances"]:
             ident = e["__identifier"]
@@ -114,18 +115,24 @@ def convert(level):
             x = e["px"][0] + li["__pxTotalOffsetX"] - round(e["width"] * e["__pivot"][0])
             y = e["px"][1] + li["__pxTotalOffsetY"] - round(e["height"] * e["__pivot"][1])
             rec = (kind, x * XS, y, e["width"] * XS, e["height"], x * XS, y, 0, FLAG_NONE)
-            if ident == "Wind":
+            if ident in ("Wind", "Geyser"):
                 ef = fields(e)
                 force, cycle, gust = round(ef["Force"] * 256), ef["Cycle"], ef["Gust"]
-                if not (0 < abs(force) < 0x8000):
-                    errors.append(f"Wind Force {ef['Force']}: nonzero, under 128")
+                if not (0 < abs(force) < 0x8000) or (ident == "Geyser" and force < 0):
+                    errors.append(f"{ident} Force {ef['Force']}: nonzero, under 128"
+                                  + (", up (above 0)" if ident == "Geyser" else ""))
                 if not (2 * WIND_RAMP < gust and gust + WIND_WARN < cycle < 0x10000):
-                    errors.append(f"Wind Cycle {cycle} / Gust {gust}: need Cycle > Gust + "
+                    errors.append(f"{ident} Cycle {cycle} / Gust {gust}: need Cycle > Gust + "
                                   f"{WIND_WARN}, Gust > {2 * WIND_RAMP}")
                 phase = ef.get("Phase") or 0
                 if not 0 <= phase < 8192:
-                    errors.append(f"Wind Phase {phase}: 0-8191")
-                flags = (1 if ef["Alternate"] else 0) | (2 if ef.get("Dust") else 0) | phase << 2
+                    errors.append(f"{ident} Phase {phase}: 0-8191")
+                flags = (1 if ef.get("Alternate") else 0) | (2 if ef.get("Dust") else 0) | phase << 2
+                if ident == "Geyser":
+                    flags -= 0x8000             # bit 15 (the field is a signed i16)
+                    # cells x range, and the row under the zone
+                    geysers.append((x // GRID, (y + e["height"]) // GRID,
+                                    (x + e["width"] + GRID - 1) // GRID))
                 rec = rec[:5] + (gust, flags, force, cycle)
             if ident == "Platform":
                 ef = fields(e)
@@ -165,6 +172,17 @@ def convert(level):
         if n > MAX_FLAGS:
             errors.append(f"{n} {ident} entities, at most {MAX_FLAGS}")
     entities.sort(key=lambda e: (e[0], e[2], e[1]))  # stable order for the core
+    # Geyser spouts: a second tile layer over the solid cells under each Geyser.
+    vents = [TILE_EMPTY] * len(cells)
+    for x0, y0, x1 in geysers:
+        cy = y0
+        xs = [cx for cx in range(x0, x1) if cell(cx, cy) == 1]
+        for cx in xs:
+            left, right = cx - 1 in xs, cx + 1 in xs
+            vents[cy * w + cx] = (terrain.VENT_MID if left and right else terrain.VENT_RIGHT if left
+                                  else terrain.VENT_LEFT if right else terrain.VENT_SINGLE)
+    if geysers:
+        tile_layers.append(vents)
 
     if errors:
         for e in errors:

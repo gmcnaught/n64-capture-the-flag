@@ -128,7 +128,9 @@ def main():
         base, paths = changes(args.base)
         full = [p for p in sorted(paths) if any(p.startswith(f) for f in FULL_PATHS)]
         if args.full or full:
-            pick(every, "full suite: " + ("--full" if args.full else ", ".join(full)))
+            print("check: full suite: " + ("--full" if args.full else ", ".join(full)),
+                  file=sys.stderr)
+            pick(every, "full suite")
         else:
             print(f"check: changes against {base}: {len(paths)} files", file=sys.stderr)
             pick(SMOKE, "smoke")
@@ -148,7 +150,8 @@ def main():
                     if re.search(pattern, text):
                         pick(names, f"{path}: {pattern.split('|')[0]}")
     for n in sorted(picked):
-        print(f"check: {n:20} {picked[n]}", file=sys.stderr)
+        if picked[n] != "full suite":
+            print(f"check: {n:20} {picked[n]}", file=sys.stderr)
     print(f"check: {len(picked)} of {len(every)} replays", file=sys.stderr)
     print(" ".join(n + ".rpl" for n in sorted(picked)))
 

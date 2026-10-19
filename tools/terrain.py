@@ -21,7 +21,8 @@ tileset byte is the index) are in sim px, 16x8 per cell, BLOB_COLS cells
 per row: the blob tiles in blob_masks() order, the one-way platform tiles
 ONEWAY_*, the fill variants from FILL_FIRST, and from EXTRA_FIRST the
 ladder and spike tiles of arena.png (LADDER_*, SPIKES), the same in
-every sheet, and from ICE_FIRST an ice-colored copy of the first
+every sheet, the geyser spout overlays VENT_*, and from ICE_FIRST an
+ice-colored copy of the first
 EXTRA_FIRST (cells with SURFACE_ICE, core/level.h). tile_index() is a
 cell's tile, used by tools/ldtk_import.py to write each level's tile
 layer. Sources:
@@ -238,6 +239,10 @@ FILL_FIRST = 51
 EXTRA_FIRST = 4 * BLOB_COLS
 LADDER_TOP, LADDER_MID, LADDER_BOTTOM, SPIKES = range(EXTRA_FIRST, EXTRA_FIRST + 4)
 EXTRAS = [204, 205, 206, 207]           # arena.png ids, in LADDER_TOP.. order
+# Geyser spout overlays (a second tile layer over the cells under a Geyser,
+# tools/ldtk_import.py), after the extras: the opening's left end, middle,
+# right end, and a one-cell spout.
+VENT_LEFT, VENT_MID, VENT_RIGHT, VENT_SINGLE = range(EXTRA_FIRST + 4, EXTRA_FIRST + 8)
 ICE_FIRST = EXTRA_FIRST + BLOB_COLS
 SURFACE_ICE = 1                         # core/level.h SURFACE_ICE
 
@@ -257,6 +262,22 @@ def icy(im):
     return out
 
 
+def vent(kind):
+    """Spout overlay, 8x8 art px: the top of a glowing opening across the
+    cells under a geyser (kind: VENT_LEFT .. VENT_SINGLE), dark at the
+    rim, hotter deeper in; transparent below."""
+    span = {VENT_LEFT: (3, 8), VENT_MID: (0, 8), VENT_RIGHT: (0, 5), VENT_SINGLE: (1, 7)}[kind]
+    open_l, open_r = kind in (VENT_LEFT, VENT_SINGLE), kind in (VENT_RIGHT, VENT_SINGLE)
+    rows = [((28, 12, 12), (196, 92, 44)), ((176, 64, 24), (255, 150, 40)), ((255, 212, 96), None)]
+    im = Image.new("RGBA", (8, 8))
+    for r, (inner, end) in enumerate(rows):
+        x0, x1 = span[0] + (r if open_l else 0), span[1] - (r if open_r else 0)
+        for x in range(x0, x1):
+            at_end = (open_l and x == x0) or (open_r and x == x1 - 1)
+            im.putpixel((x, r), (end if at_end and end else inner) + (255,))
+    return im
+
+
 def sheet(name):
     """The 16x8 sim px sheet (layout: module doc)."""
     src = Source(name)
@@ -269,6 +290,7 @@ def sheet(name):
     tiles += [None] * (EXTRA_FIRST - len(tiles))
     arena = Source("arena")
     tiles += [to_cell(arena.tile(t), None) for t in EXTRAS]
+    tiles += [to_cell(vent(k), None) for k in range(VENT_LEFT, VENT_SINGLE + 1)]
     tiles += [None] * (ICE_FIRST - len(tiles))
     tiles += [im and icy(im) for im in tiles[:EXTRA_FIRST]]
     rows = (len(tiles) + BLOB_COLS - 1) // BLOB_COLS

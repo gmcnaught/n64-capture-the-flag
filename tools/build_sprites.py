@@ -21,10 +21,13 @@ Layouts below are in art px (before the stretch):
             death, hurt, attack, then dash (tools/effects.py: a run frame
             leaning forward with speed lines, 3 frames)
   p2        Dino Characters "doux" (blue), same layout
+  p3        p1 lighter (light red: saturated mid tones paler and brighter)
+  p4        p2 darker (dark blue)
   jumppad   Rocky Roads bounce pad halved (nearest): 4 frames of 8x16
   flag      Rocky Roads flag halved (nearest): 9 frames of 16x16; row 0 red
-            (team 1), row 1 recolored blue (team 2), row 2 (first cell) a
-            dotted outline of frame 0 for empty goal stands
+            (team 1), row 1 with the cloth pale blue (team 2), both with a 1 px
+            dark border around the cloth; row 2 (first cell) a dotted
+            outline of frame 0 for empty goal stands
   sky_<backdrop>, scenery_<backdrop>  the backdrops (tools/scenery.py),
             already at sim resolution (640 wide, not stretched); also writes
             their names and sky heights to platform/common/backdrops.h
@@ -106,6 +109,68 @@ def recolor(im, hue_shift):
     return out
 
 
+def tone(im, sat, val):
+    """Scale saturation and value of the saturated mid tones (the body
+    colors; outlines and the belly stay)."""
+    out = im.copy()
+    px = out.load()
+    for y in range(out.height):
+        for x in range(out.width):
+            r, g, b, a = px[x, y]
+            h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+            if a and s > 0.35 and v > 0.4:
+                r, g, b = colorsys.hsv_to_rgb(h, min(1.0, s * sat), min(1.0, v * val))
+                px[x, y] = (round(r * 255), round(g * 255), round(b * 255), a)
+    return out
+
+
+def is_cloth(px):
+    """A flag cloth pixel: saturated red (the pole is dark purple)."""
+    r, g, b, a = px
+    h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+    return a and s > 0.35 and v > 0.4 and (h > 0.9 or h < 0.08)
+
+
+def is_blue_cloth(px):
+    r, g, b, a = px
+    h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+    return a and s > 0.15 and v > 0.6 and 0.5 < h < 0.7
+
+
+def blue_cloth(im, hue=0.6, sat=0.45, val=1.25):
+    """The red flag with its cloth pale blue (the pole kept): lighter than
+    the blue skies, it reads on them with the dark border."""
+    out = im.copy()
+    px = out.load()
+    for y in range(out.height):
+        for x in range(out.width):
+            if is_cloth(px[x, y]):
+                r, g, b, a = px[x, y]
+                _, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+                r, g, b = colorsys.hsv_to_rgb(hue, min(1.0, s * sat), min(1.0, v * val))
+                px[x, y] = (round(r * 255), round(g * 255), round(b * 255), a)
+    return out
+
+
+def cloth_border(im, color=(16, 20, 48, 255), cloth=None):
+    """A 1 px dark border around each frame's cloth (transparent pixels next
+    to a cloth pixel), so the flag reads on any sky."""
+    cloth = cloth or is_cloth
+    out = im.copy()
+    src, px = im.load(), out.load()
+    for y in range(im.height):
+        for x in range(im.width):
+            if src[x, y][3]:
+                continue
+            fx, fy = x // 16 * 16, y // 16 * 16       # 16x16 frames: no border across one
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                nx, ny = x + dx, y + dy
+                if fx <= nx < fx + 16 and fy <= ny < fy + 16 and cloth(src[nx, ny]):
+                    px[x, y] = color
+                    break
+    return out
+
+
 def dotted_outline(frame, color=(236, 236, 244, 255)):
     """Every other edge pixel of a sprite's silhouette (pixels next to a
     transparent one), checkerboard order."""
@@ -136,13 +201,17 @@ def stack(images):
 
 
 def sheets():
-    yield "p1", dino("mort")
-    yield "p2", dino("doux")
+    p1, p2 = dino("mort"), dino("doux")
+    yield "p1", p1
+    yield "p2", p2
+    yield "p3", tone(p1, 0.5, 1.3)
+    yield "p4", tone(p2, 1.1, 0.6)
     pad = load(os.path.join(ROCKY, "Objects", "bounce pad.png"))
     yield "jumppad", pad.resize((pad.width // 2, pad.height // 2), Image.NEAREST)
     flag = load(os.path.join(ROCKY, "Objects", "flag.png"))
     flag = flag.resize((flag.width // 2, flag.height // 2), Image.NEAREST)
-    yield "flag", stack([flag, recolor(flag, 0.6), dotted_outline(flag.crop((0, 0, 16, 16)))])
+    yield "flag", stack([cloth_border(flag), cloth_border(blue_cloth(flag), cloth=is_blue_cloth),
+                         dotted_outline(flag.crop((0, 0, 16, 16)))])
     apple = load(os.path.join(ROCKY, "Objects", "apple.png"))
     yield "fruit", recolor(apple.resize((8, 8), Image.NEAREST), 0.55)
     hearts = load(os.path.join(ROCKY, "UI", "hearts.png"))

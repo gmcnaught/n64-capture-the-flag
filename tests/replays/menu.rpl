@@ -30,7 +30,19 @@ tune fruit_min 0x0000ea60
 20 LC / RC
 1 C / C
 1 C / JC
+1 C / C
+1 AC / C
+1 C / C
+1 SC / C
+1 C / C
+1 DC / C
+1 C / C
+1 RC / C
+1 C / C
+1 RC / C
+1 C / C
+1 SC / C
 220 C / C
 20 LC / RC
-hash e3be81bf
+hash 74de2db6
 kos 0 0

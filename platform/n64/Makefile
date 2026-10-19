@@ -39,7 +39,7 @@ ASSETS_DIR := ../../build/assets
 FS_DIR := filesystem
 BACKDROPS := forest desert moon sky
 TILESETS := arena rocky_forest rocky_desert rocky_snow rocky_lava
-SPRITES := p1 p2 jumppad flag hud fruit font slash controls platform $(addprefix tiles_,$(TILESETS)) \
+SPRITES := p1 p2 p3 p4 jumppad flag hud fruit font slash controls platform $(addprefix tiles_,$(TILESETS)) \
            $(addprefix sky_,$(BACKDROPS)) $(addprefix scenery_,$(BACKDROPS))
 MUSIC_DIR := ../../new-assets/music
 MODULES := $(basename $(notdir $(wildcard $(MUSIC_DIR)/*.xm)))

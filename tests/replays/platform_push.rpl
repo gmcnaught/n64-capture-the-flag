@@ -1,12 +1,14 @@
-# platform_push Sky stage. P1 stands on the bump left of the pillar; the
+# platform_push Sky stage. P1 stands on the row 23 wall right of the red
 level sky.lvl
 abilities 7
 tune fruit_min 0x0000ea60
 232 C / C
 3 LC / C
-36 LJC / C
+7 LJC / C
+1 LC / C
+29 LJC / C
 6 C / C
-6 RC / C
-108 C / C
-hash 68f12c95
+22 LC / C
+102 C / C
+hash a14bc8a7
 kos 0 0

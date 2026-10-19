@@ -9,7 +9,7 @@
 
 static const char *const sprite_names[SPR_COUNT] = {
     "tiles", "p1", "p2", "jumppad", "flag", "sky", "scenery", "hud", "fruit", "font", "slash",
-    "controls", "platform",
+    "controls", "platform", "p3", "p4",
 };
 
 void scene_sheet_name(int spr, int backdrop, int tileset, char *out, int size)
@@ -259,12 +259,46 @@ static void draw_dust(const Game *g, const DrawApi *d, const WindZone *z)
     }
 }
 
+/* Geyser: bubbles hop at its base during the warning, more as it nears;
+ * erupting, lava sparks rise through the zone and a little above it, as
+ * many as it is strong, white-yellow low down, orange, then red. */
+#define GEYSER_SPARKS 34
+#define GEYSER_OVER 24          /* px the sparks rise above the zone */
+
+static void draw_geyser(const Game *g, const DrawApi *d, const WindZone *z)
+{
+    static const uint32_t heat[4] = {0xfff0b0ffu, 0xffc040ffu, 0xff7820ffu, 0xd83018ffu};
+    int into, st = zone_strength(g, z, &into), base = z->y + z->h;
+    if (!st)
+        return;
+    if (into < 0) {
+        int n = 2 + 6 * st / 64;
+        for (int i = 0; i < n; i++) {
+            uint32_t h = hash32((uint32_t)i * 0x9e3779b9u + 13);
+            int t = (int)((g->anim + h) % 12), hop = t < 6 ? t : 12 - t;
+            d->fill(d->ctx, z->x + (int)(h >> 8) % (z->w - 2), base - 2 - hop, 2, 2, heat[1 + (i & 1)]);
+        }
+        return;
+    }
+    int n = 4 + (GEYSER_SPARKS - 4) * st / 256;
+    uint32_t span = (uint32_t)(z->h + GEYSER_OVER);
+    for (int i = 0; i < n; i++) {
+        uint32_t h = hash32((uint32_t)i * 0x9e3779b9u + 17);
+        uint32_t travel = (h >> 16) % span + g->anim * (3 + h % 3);
+        int pos = (int)(travel % span);
+        int x = z->x + (int)(hash32(h + travel / span) % (uint32_t)(z->w - 2));
+        d->fill(d->ctx, x, base - pos, 2, 2 + (int)(h & 1), heat[pos * 4 / (int)span]);
+    }
+}
+
 static void draw_wind(const Game *g, const DrawApi *d)
 {
     if (g->title)
         return;
     for (int i = 0; i < g->wind_count; i++) {
-        if (g->winds[i].dust)
+        if (g->winds[i].up)
+            draw_geyser(g, d, &g->winds[i]);
+        else if (g->winds[i].dust)
             draw_dust(g, d, &g->winds[i]);
         else
             draw_streaks(g, d, &g->winds[i]);
@@ -306,17 +340,22 @@ static void draw_water(const Game *g, const DrawApi *d)
 #define SLASH_SIDE_H 24
 #define SLASH_UP_W 48
 #define SLASH_UP_H 16
-static const uint32_t GHOST_TINT[TEAM_COUNT][DASH_GHOSTS] = {
+/* Per player, in the shade of its sprite: P1 red, P2 blue, P3 light red, P4 dark blue. */
+static const uint32_t GHOST_TINT[MAX_PLAYERS][DASH_GHOSTS] = {
     {0xe06060, 0xa04040, 0x682a2a}, {0x5888e0, 0x3c5ca0, 0x283c68},
+    {0xf8a8b4, 0xd07888, 0x985060}, {0x3c5c9c, 0x2a4070, 0x1c2a4a},
 };
-static const uint32_t SLASH_TINT[TEAM_COUNT] = {0xffa0a0, 0xa8d0ff};
+static const uint32_t SLASH_TINT[MAX_PLAYERS] = {0xffa0a0, 0xa8d0ff, 0xffd0dc, 0x7898d8};
 
-static void draw_player(const Game *g, const DrawApi *d, int t, int spr)
+static const uint8_t PLAYER_SPR[MAX_PLAYERS] = {SPR_P1, SPR_P2, SPR_P3, SPR_P4};
+
+static void draw_player(const Game *g, const DrawApi *d, int i)
 {
-    const Player *p = &g->players[t];
+    const Player *p = &g->players[i];
+    int spr = PLAYER_SPR[i];
     const Body *b = &p->body;
-    if (g->carrying[t] >= 0)
-        draw_flag(g, d, g->carrying[t]);    /* behind the carrier */
+    if (g->carrying[i] >= 0)
+        draw_flag(g, d, g->carrying[i]);    /* behind the carrier */
     if (p->dead || (p->invuln & 4))
         return;
     int cx = p->facing < 0 ? PLAYER_SPRITE_W - PLAYER_SPRITE_CX : PLAYER_SPRITE_CX;
@@ -332,15 +371,15 @@ static void draw_player(const Game *g, const DrawApi *d, int t, int spr)
         for (int k = DASH_GHOSTS; k >= 1; k--)
             if (age >= 2 * k && ((g->anim + (uint32_t)k) & 1))
                 d->blit_tint(d->ctx, spr, sx, sy, PLAYER_SPRITE_W, PLAYER_SPRITE_H,
-                             x - p->dash_dir * k * DASH_GHOST_STEP, y, flip, GHOST_TINT[t][k - 1]);
+                             x - p->dash_dir * k * DASH_GHOST_STEP, y, flip, GHOST_TINT[i][k - 1]);
     }
     d->blit(d->ctx, spr, sx, sy, PLAYER_SPRITE_W, PLAYER_SPRITE_H, x, y, flip);
 }
 
 /* Attack slash while the hitbox is out: 3 frames over attack_active. */
-static void draw_slash(const Game *g, const DrawApi *d, int t)
+static void draw_slash(const Game *g, const DrawApi *d, int i)
 {
-    const Player *p = &g->players[t];
+    const Player *p = &g->players[i];
     const Body *b = &p->body;
     int active = g->tuning.attack_active > 0 ? g->tuning.attack_active : 1;
     int age = g->tuning.attack_frames - p->attack_timer;
@@ -353,13 +392,13 @@ static void draw_slash(const Game *g, const DrawApi *d, int t)
         d->blit_tint(d->ctx, SPR_SLASH, f * SLASH_UP_W, SLASH_SIDE_H, SLASH_UP_W, SLASH_UP_H,
                      b->x + b->w / 2 - SLASH_UP_W / 2,
                      p->attack_dir == ATK_UP ? b->y + 2 - SLASH_UP_H : b->y + b->h - 2,
-                     p->attack_dir == ATK_DOWN ? FLIP_Y : 0, SLASH_TINT[t]);
+                     p->attack_dir == ATK_DOWN ? FLIP_Y : 0, SLASH_TINT[i]);
         break;
     default:
         d->blit_tint(d->ctx, SPR_SLASH, f * SLASH_SIDE_W, 0, SLASH_SIDE_W, SLASH_SIDE_H,
                      p->facing > 0 ? b->x + b->w - 6 : b->x + 6 - SLASH_SIDE_W,
                      b->y + b->h / 2 - SLASH_SIDE_H / 2, p->facing < 0 ? FLIP_X : 0,
-                     SLASH_TINT[t]);
+                     SLASH_TINT[i]);
         break;
     }
 }
@@ -369,14 +408,17 @@ static void draw_slash(const Game *g, const DrawApi *d, int t)
 static void draw_hud(const Game *g, const DrawApi *d)
 {
     char l[16];
-    for (int t = 0; t < TEAM_COUNT; t++) {
-        const Player *p = &g->players[t];
+    for (int k = 0; k < g->player_count; k++) {
+        const Player *p = &g->players[k];
+        int t = game_team(k);
         /* P1 top-left, P2 top-right, inside the safe area: hearts, then the
-         * rounds won. */
+         * team's rounds won; P3 and P4's hearts below. */
         int x0 = t == 0 ? SAFE_X : VIEW_W - SAFE_X - PLAYER_HEALTH * (HEART_W + 4);
         for (int i = 0; i < PLAYER_HEALTH; i++)
             d->blit(d->ctx, SPR_HUD, (i < p->health ? 0 : 3) * HEART_W, 0, HEART_W, HEART_H,
-                    x0 + i * (HEART_W + 4), SAFE_Y, 0);
+                    x0 + i * (HEART_W + 4), SAFE_Y + k / TEAM_COUNT * (HEART_H + 3), 0);
+        if (k >= TEAM_COUNT)
+            continue;
         snprintf(l, sizeof l, "%u", (unsigned)g->wins[t]);
         int tx = t == 0 ? x0 + PLAYER_HEALTH * (HEART_W + 4) + 8
                         : x0 - 8 - (int)strlen(l) * TEXT_CW;
@@ -391,6 +433,7 @@ enum { FONT_MEDIUM, FONT_LARGE, FONT_SMALL };   /* font_sizes[] in font_glyphs.h
 #define TINT_WHITE 0xffffff
 #define TINT_GOLD  0xffd040
 #define TINT_DIM   0xa8b0c8
+#define TINT_B     0x60d880     /* the B button's color (CONTROLS screen) */
 static const uint32_t TEAM_TINT[TEAM_COUNT] = {0xff5a5a, 0x60a8ff};
 
 /* Height of a line of text, sim px (fill and outline; the shadow hangs below). */
@@ -486,21 +529,32 @@ static void draw_title(const Game *g, const DrawApi *d)
     font_text(g, d, x, y, "RED ", FONT_MEDIUM, TEAM_TINT[0], 0);
     font_text(g, d, x + w_red, y, "VS ", FONT_MEDIUM, TINT_DIM, 0);
     font_text(g, d, x + w_red + w_vs, y, "BLUE", FONT_MEDIUM, TEAM_TINT[1], 0);
+    if ((g->frame / 30) & 1 || g->frame < 30)
+        font_center(g, d, 170, "PRESS START", FONT_MEDIUM, TINT_WHITE, 0);
+}
+
+/* Setup screen: STAGE and PLAYERS rows. */
+static void draw_setup(const Game *g, const DrawApi *d)
+{
+    static const char *const players[] = {"1 VS 1", "2 VS 1", "2 VS 2"};
+    dim(d);
+    font_center(g, d, 40, "MATCH", FONT_LARGE, TINT_GOLD, 0);
+    int bw = font_width("B BACK", FONT_SMALL);
+    font_text(g, d, VIEW_W - SAFE_X - bw, 10, "B", FONT_SMALL, TINT_B, 0);
+    font_text(g, d, VIEW_W - SAFE_X - bw + font_width("B", FONT_SMALL), 10, " BACK", FONT_SMALL,
+              TINT_WHITE, 0);
     /* Stage: the level's name up to its extension, upper case. */
-    char stage[24], backdrop[16];
+    char stage[24];
     const char *n = g->lv.name ? g->lv.name : "ARENA";
     int k = 0;
     for (; n[k] && n[k] != '.' && k < (int)sizeof stage - 1; k++)
         stage[k] = (char)(n[k] >= 'a' && n[k] <= 'z' ? n[k] - 'a' + 'A' : n[k]);
     stage[k] = 0;
-    for (k = 0; backdrop_names[g->backdrop][k] && k < (int)sizeof backdrop - 1; k++)
-        backdrop[k] = (char)(backdrop_names[g->backdrop][k] - 'a' + 'A');
-    backdrop[k] = 0;
-    title_row(g, d, 250, 140, "STAGE", stage, g->title_sel == TITLE_STAGE, g->stage_count);
-    title_row(g, d, 250, 164, "BACKGROUND", backdrop, g->title_sel == TITLE_BACKDROP,
-              BACKDROP_COUNT);
+    title_row(g, d, 250, 104, "STAGE", stage, g->title_sel == SETUP_STAGE, g->stage_count);
+    title_row(g, d, 250, 128, "PLAYERS", players[g->player_count - TEAM_COUNT],
+              g->title_sel == SETUP_PLAYERS, MAX_PLAYERS - TEAM_COUNT + 1);
     if ((g->frame / 30) & 1 || g->frame < 30)
-        font_center(g, d, 200, "PRESS START", FONT_MEDIUM, TINT_WHITE, 0);
+        font_center(g, d, 184, "PRESS START", FONT_MEDIUM, TINT_WHITE, 0);
 }
 
 static void draw_pause(const Game *g, const DrawApi *d)
@@ -534,7 +588,6 @@ static void draw_pause(const Game *g, const DrawApi *d)
 #define LABEL_GAP 16            /* picture edge to labels */
 #define TINT_PART 0xd0d4e0
 #define TINT_A 0x6c9cff
-#define TINT_B 0x60d880
 
 typedef struct {
     int8_t ax, ay, r;           /* part center and radius, art px (tools/controls.py) */
@@ -659,14 +712,16 @@ static void draw_debug(const Game *g, const DrawApi *d)
         outline(d, pl->x1, pl->y1, s->w, s->h, 0xffffff60);  /* far end of the path */
     }
     for (int t = 0; t < TEAM_COUNT; t++) {
-        const Player *p = &g->players[t];
-        const Body *b = &p->body;
-        int ax, ay, aw, ah;
         uint32_t c = t ? 0x50a0ffff : 0xff6060ff;
         outline(d, g->goal_x[t], g->goal_y[t], g->goal_w[t], g->goal_h[t], c);
         outline(d, g->home_x0[t], g->home_y0[t], g->home_x1[t] - g->home_x0[t],
                 g->home_y1[t] - g->home_y0[t], c);
-        outline(d, b->x, b->y, b->w, b->h, c);
+    }
+    for (int i = 0; i < g->player_count; i++) {
+        const Player *p = &g->players[i];
+        const Body *b = &p->body;
+        int ax, ay, aw, ah;
+        outline(d, b->x, b->y, b->w, b->h, game_team(i) ? 0x50a0ffff : 0xff6060ff);
         if (game_attack_box(g, p, &ax, &ay, &aw, &ah))
             outline(d, ax, ay, aw, ah, 0xffffffff);
     }
@@ -684,16 +739,20 @@ void scene_draw(const Game *g, const DrawApi *d, int debug)
     draw_platforms(g, d);
     draw_flags(g, d);
     draw_pads(g, d);
-    draw_player(g, d, 1, SPR_P2);
-    draw_player(g, d, 0, SPR_P1);
-    draw_slash(g, d, 1);
-    draw_slash(g, d, 0);
+    for (int i = g->player_count - 1; i >= 0; i--)     /* P1 on top */
+        draw_player(g, d, i);
+    for (int i = g->player_count - 1; i >= 0; i--)
+        draw_slash(g, d, i);
     draw_water(g, d);
     draw_wind(g, d);
     if (debug)
         draw_debug(g, d);
-    if (g->title) {
+    if (g->title == TITLE_SCREEN) {
         draw_title(g, d);
+        return;
+    }
+    if (g->title == TITLE_SETUP) {
+        draw_setup(g, d);
         return;
     }
     draw_hud(g, d);

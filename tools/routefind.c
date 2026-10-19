@@ -6,15 +6,17 @@
  *   REPLAY  replay so far: played through game_tick, so the search starts
  *           from player SIDE's exact state (at rest), carrying or not, with
  *           the replay's tuning
- *   SIDE    0 = P1, 1 = P2
+ *   SIDE    0 = P1, 1 = P2, 2 = P3, 3 = P4
  *   TARGET  flags1 | flags2 (touch a home flag of team 1/2),
  *           goal1 | goal2 (touch the goal zone of team 1/2),
  *           flag:I (touch flag I at home; Game.flags order),
- *           rest:X0,X1,Y (come to rest with X0 <= x <= X1 at y = Y)
+ *           rest:X0,X1,Y (come to rest with X0 <= x <= X1 at y = Y),
+ *           ride:I (come to rest standing on moving platform I)
  * A carrier moves at tuning.carry_speed. Wind is left out (routes are
  * followed between gusts). The other player is a fixed solid
  * box where it stands at the end of the replay (it must keep still while
- * the route is followed), as the game makes it solid to the moving one.
+ * the route is followed), as the game makes it solid to the moving one;
+ * so are the others in a game of more than two.
  * On a level with moving platforms, where a move goes depends on
  * when it starts, every move runs the whole game (game_tick, the other
  * player idle) from the exact game state, so routes include riding and
@@ -56,7 +58,7 @@ static int game_mode, side;
 static Level lv;
 static PlayerTuning tun;
 static int targets[3][4], ntargets;     /* target rectangles: home flags or a goal */
-static int rest_x0, rest_x1, rest_y = -1;
+static int rest_x0, rest_x1, rest_y = -1, ride = -1;
 static Node nodes[MAX_NODES];
 static int nnodes;
 
@@ -77,7 +79,7 @@ static Game sim;                /* game_mode: the game the move runs in */
 static int tick(Player *p, uint16_t held)
 {
     if (game_mode) {
-        InputState in[TEAM_COUNT] = {{BTN_CONNECTED, 0, 0}, {BTN_CONNECTED, 0, 0}};
+        InputState in[MAX_PLAYERS] = {{BTN_CONNECTED, 0, 0}, {BTN_CONNECTED, 0, 0}};
         in[side].buttons |= held;
         game_tick(&sim, in);
         *p = sim.players[side];
@@ -181,21 +183,25 @@ int main(int argc, char **argv)
     if (level_load(&lv, data, (uint32_t)n)) { fprintf(stderr, "bad level\n"); return 2; }
     Replay rp;
     if (replay_load(&rp, argv[2])) { fprintf(stderr, "%s: bad replay\n", argv[2]); return 2; }
-    side = atoi(argv[3]) ? 1 : 0;
+    side = atoi(argv[3]);
     static Game g;
     replay_start(&rp, &g, &lv);
     for (size_t i = 0; i < rp.count; i++)
         game_tick(&g, rp.frames[i].in);
     game_mode = g.platform_count > 0;
-    const Player *o = &g.players[!side];
-    if (!o->dead && !g.caught[!side])
-        lv.solids[lv.solid_count++] = (Solid){o->body.x, o->body.y, o->body.w, o->body.h, 1, 0};
+    if (side < 0 || side >= g.player_count) { fprintf(stderr, "no player %d\n", side); return 2; }
+    for (int i = 0; i < g.player_count; i++) {
+        const Player *o = &g.players[i];
+        if (i != side && !o->dead && !g.caught[i])
+            lv.solids[lv.solid_count++] = (Solid){o->body.x, o->body.y, o->body.w, o->body.h, 1, 0};
+    }
     tun = g.tuning;
     if (g.carrying[side] >= 0)
         tun.run_speed = tun.carry_speed;
     const char *t = argv[4];
     int team = t[strlen(t) - 1] - '1', fi;
-    if (sscanf(t, "rest:%d,%d,%d", &rest_x0, &rest_x1, &rest_y) == 3) {
+    if (sscanf(t, "rest:%d,%d,%d", &rest_x0, &rest_x1, &rest_y) == 3 ||
+        (sscanf(t, "ride:%d", &ride) == 1 && ride >= 0 && ride < g.platform_count)) {
         /* no touch targets */
     } else if (sscanf(t, "flag:%d", &fi) == 1 && fi >= 0 && fi < g.flag_count) {
         int *r = targets[ntargets++];
@@ -240,6 +246,11 @@ int main(int argc, char **argv)
                                  kk == K_DOUBLE ? kbuf : kn[kk], air_same ? (dir < 0 ? "L" : "R") : "-");
                         if (rest_y >= 0 && !hit)
                             hit = oy == rest_y && ox >= rest_x0 && ox <= rest_x1;
+                        if (ride >= 0 && !hit) {
+                            const Solid *so = &sim.lv.solids[ride];
+                            hit = oy + res.body.h == so->y && ox < so->x + so->w &&
+                                  ox + res.body.w > so->x;
+                        }
                         if (!hit && (seen(ox, oy) || nnodes >= MAX_NODES - 1))
                             continue;
                         nodes[nnodes].p = res;

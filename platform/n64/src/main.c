@@ -12,10 +12,11 @@
  * buffer when it opens and copied while it stays: nothing under it moves
  * while paused (Game.anim).
  *
- * Controllers 1 and 2: stick/D-pad move, A jump, Z or R dash, B attack,
- * Start start / pause (menu: up/down, A picks). Boots to the title screen
- * (up/down row, left/right stage or background; a stage change loads that
- * level).
+ * Controllers 1 to 4 (P1 .. P4; P3 and P4 play when the setup screen's
+ * PLAYERS says so): stick/D-pad move, A jump, Z or R dash, B attack,
+ * Start start / pause (menu: up/down, A picks). Boots to the title screen;
+ * Start opens the setup screen (up/down row, left/right stage or players;
+ * a stage change loads that level).
  * Debug (controller 1): L next level, C-down restart (skips the title),
  * C-up debug overlay.
  *
@@ -347,7 +348,7 @@ static void render(const char *status, bool wait)
     if (status)
         text(8, VIEW_H - 12, "%s", status);
     if (debug) {
-        for (int t = 0; t < TEAM_COUNT; t++) {
+        for (int t = 0; t < game.player_count; t++) {
             const Body *b = &game.players[t].body;
             text(8, 32 + t * 10, "P%d x %d y %d", t + 1, b->x, b->y);
         }
@@ -373,7 +374,7 @@ static void render(const char *status, bool wait)
         g_frame_us_max = g_frame_us;
 }
 
-static void tick(const InputState in[TEAM_COUNT])
+static void tick(const InputState in[MAX_PLAYERS])
 {
     game_tick(&game, in);
     g_frame = game.frame;
@@ -425,8 +426,10 @@ static void autotest(const char *list)
                 measuring = true;
         }
         measuring = false;
-        bool ok = (!r.has_hash || r.hash == g_game_hash) &&
-                  (!r.has_kos || (r.kos[0] == game.kos[0] && r.kos[1] == game.kos[1]));
+        bool kos_ok = true;
+        for (int t = 0; t < r.players; t++)
+            kos_ok &= r.kos[t] == game.kos[t];
+        bool ok = (!r.has_hash || r.hash == g_game_hash) && (!r.has_kos || kos_ok);
         snprintf(results[i], 64, "%-22.22s %08lx %s", names[i], (unsigned long)g_game_hash,
                  ok ? "PASS" : "FAIL");
         debugf("replay %s: hash %08lx kos %d,%d %s\n", names[i], (unsigned long)g_game_hash,
@@ -599,9 +602,9 @@ int main(void)
         if (pressed.c_up)
             debug = !debug;
 
-        InputState in[TEAM_COUNT];
-        read_input(JOYPAD_PORT_1, &in[0]);
-        read_input(JOYPAD_PORT_2, &in[1]);
+        InputState in[MAX_PLAYERS];
+        for (int t = 0; t < MAX_PLAYERS; t++)
+            read_input((joypad_port_t)(JOYPAD_PORT_1 + t), &in[t]);
         tick(in);
         if (game.stage != level_index) {
             load_level(game.stage);

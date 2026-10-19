@@ -1,0 +1,12 @@
+# lava_geyser Lava stage (a geyser over each floor bump). P1 stands on
+level lava.lvl
+abilities 7
+tune fruit_min 0x0000ea60
+232 C / C
+14 LC / C
+2 DC / C
+2 DJC / C
+11 LC / C
+249 C / C
+hash 32d7a833
+kos 0 0

@@ -1,4 +1,5 @@
-/* Game state: one arena, two players, one fixed tick per displayed frame.
+/* Game state: one arena, two teams of one or two players, one fixed tick
+ * per displayed frame.
  *
  * The whole arena is on screen (640x240 sim px, core/level.h), so there is
  * no camera. Capture the flag:
@@ -16,11 +17,15 @@
  *   - every round opens with a 3, 2, 1 countdown (COUNTDOWN_STEP frames
  *     each) with everything frozen; play starts on GO!, which stays on
  *     screen for COUNTDOWN_GO frames.
+ * Players: Game.player_count, 2 to MAX_PLAYERS. Player i is on team
+ * i % TEAM_COUNT: P1 and P3 red, P2 and P4 blue; P3 starts by P1 and P4
+ * by P2, TEAMMATE_GAP apart, on the side away from the middle. Teammates cannot hit
+ * each other.
  * Players are solid to each other: they block, a head-bump stops a jump,
- * and one can stand on the other. The player underneath is weighed down
- * (tuning.weight_speed, weight_jump) and lifts the rider when it jumps; a
- * rider landing on a rising player stops that jump. Players that overlap
- * (after a respawn) pass through each other until they separate.
+ * and one can stand on another (in a stack). A player underneath is weighed
+ * down (tuning.weight_speed, weight_jump) and lifts its riders when it
+ * jumps; a rider landing on a rising player stops that jump. Players that
+ * overlap (after a respawn) pass through each other until they separate.
  * Water fruit (Bubble Bobble water): every tuning.fruit_min .. fruit_min +
  * fruit_range frames (15..25 s by default) a fruit appears at a random FruitSpot (sim PRNG) for FRUIT_LIFE
  * frames. Touching it releases a stream of WATER_LEN cells at the spot,
@@ -38,13 +43,14 @@
  * Hits on a player without a flag knock back and cost a pip; at 0 pips the
  * player plays the death animation and respawns at its start after
  * RESPAWN_FRAMES. Hazards cost a pip and respawn at the last safe ground.
- * Screens: the title screen (game_title) waits for Start or Jump from
- * either player, then starts a match (rounds won and knockouts reset).
- * On it, Up/Down pick a row and Left/Right change it: STAGE (the level,
- * Game.stage; the platform sees the change, loads that level and calls
- * game_set_level) and BACKGROUND (Game.backdrop, which a stage change
- * resets to the level's). The pick holds for the match.
- * Either player's Start pauses and resumes; paused, Up/Down move the menu
+ * Screens: the title screen (game_title) waits for Start or Jump from any
+ * controller, then shows the setup screen: Up/Down pick a row and
+ * Left/Right change it: STAGE (the level, Game.stage; the platform sees
+ * the change, loads that level and calls game_set_level) and PLAYERS
+ * (Game.player_count); Start starts a match (rounds won and knockouts
+ * reset), Attack goes back to the title. The picks hold for the match;
+ * the backdrop is the level's.
+ * Any player's Start pauses and resumes; paused, Up/Down move the menu
  * cursor and Jump/Attack picks RESUME, CONTROLS (a controls screen; Start,
  * Jump or Attack goes back to the menu), RESTART (new match) or QUIT
  * (title screen). The screens live in the sim so replays reproduce them; replays
@@ -62,6 +68,9 @@
 #define VIEW_W 640
 #define VIEW_H 240
 #define TEAM_COUNT 2
+#define MAX_PLAYERS 4
+#define TEAMMATE_GAP 12         /* px between P1 and P3 (P2 and P4) at the start: the sprites
+                                 * reach 3 px past the 24 px body on each side */
 #define MAX_PADS 16
 #define PAD_ANIM_FRAMES 20      /* JumpPad.timer after a launch */
 #define RESPAWN_FRAMES 90       /* dead -> respawn at the team start */
@@ -82,10 +91,12 @@
  * from the end of the round countdown plus its phase, is calm, then
  * WIND_WARN frames of warning (render and sound only), then a gust of
  * `gust` frames ramping up and down over WIND_RAMP frames. Bodies in the
- * zone are pushed by its force. */
+ * zone are pushed by its force: sideways, or for a geyser (`up`) upward,
+ * the force added to their rising speed each frame up to WIND_LIFT_MAX. */
 #define WIND_WARN 60
 #define WIND_RAMP 20
 #define MAX_WINDS 4
+#define WIND_LIFT_MAX FX(5)     /* fastest rise in a geyser, px/frame */
 
 typedef struct {
     int16_t x, y, w, h;
@@ -93,7 +104,9 @@ typedef struct {
     uint16_t cycle, gust, phase;
     uint8_t alternate;              /* each gust the other way */
     uint8_t dust;                   /* drawn as a dust storm (else streaks; render only) */
-    int32_t force;                  /* fx px/frame pushing right (negative: left) this frame */
+    uint8_t up;                     /* a geyser: force pushes up (px/frame^2) */
+    int32_t force;                  /* fx px/frame pushing right (negative: left) this frame;
+                                     * a geyser: upward, px/frame^2 */
     int8_t dir;                     /* direction of the current or next gust: 1 right, -1 left */
 } WindZone;
 /* Moving platforms (ENT_PLATFORM): a solid box (Level.solids, the same
@@ -106,7 +119,7 @@ typedef struct {
  * carrier drops its flag first). Dropped flags are not pushed (one under
  * a platform stays there). A one-way platform carries only; rising, it
  * also picks up a body whose feet it passes. */
-#define MAX_PLATFORMS (LEVEL_MAX_SOLIDS - 1)  /* the last solid is the other player */
+#define MAX_PLATFORMS (LEVEL_MAX_SOLIDS - MAX_PLAYERS + 1)  /* then the other players */
 #define PLATFORM_WAIT 30
 
 typedef struct {
@@ -128,13 +141,14 @@ typedef struct {
 enum { FS_HOME, FS_CARRIED, FS_DROPPED, FS_PLACED };
 enum { MENU_RESUME, MENU_CONTROLS, MENU_RESTART, MENU_QUIT, MENU_COUNT };   /* pause menu items */
 enum { PAUSE_MENU = 1, PAUSE_CONTROLS };    /* Game.paused, when nonzero */
-enum { TITLE_STAGE, TITLE_BACKDROP, TITLE_ROWS };   /* title screen rows */
+enum { TITLE_SCREEN = 1, TITLE_SETUP };    /* Game.title, when nonzero */
+enum { SETUP_STAGE, SETUP_PLAYERS, SETUP_ROWS };    /* setup screen rows */
 
 typedef struct {
     Body body;                  /* position; falls while dropped */
     uint8_t team;               /* owner, 0 or 1 */
     uint8_t state;              /* FS_* */
-    uint8_t holder;             /* FS_CARRIED: carrying team; FS_PLACED: goal's team */
+    uint8_t holder;             /* FS_CARRIED: carrying player; FS_PLACED: goal's team */
     int16_t home_x, home_y;
 } Flag;
 
@@ -146,11 +160,12 @@ typedef struct {
 typedef struct {
     Level lv;
     PlayerTuning tuning;
-    Player players[TEAM_COUNT];
-    int16_t spawn_x[TEAM_COUNT], spawn_y[TEAM_COUNT];   /* body top-left at the team start */
+    Player players[MAX_PLAYERS];    /* the first player_count play */
+    uint8_t player_count;
+    int16_t spawn_x[MAX_PLAYERS], spawn_y[MAX_PLAYERS]; /* body top-left at the player's start */
     Flag flags[MAX_GAME_FLAGS];
     uint8_t flag_count;
-    int8_t carrying[TEAM_COUNT];    /* index into flags, or -1 */
+    int8_t carrying[MAX_PLAYERS];   /* index into flags, or -1 */
     /* Goal zones and home areas (around the team's home flags), sim px. */
     int16_t goal_x[TEAM_COUNT], goal_y[TEAM_COUNT], goal_w[TEAM_COUNT], goal_h[TEAM_COUNT];
     int16_t home_x0[TEAM_COUNT], home_y0[TEAM_COUNT], home_x1[TEAM_COUNT], home_y1[TEAM_COUNT];
@@ -158,9 +173,10 @@ typedef struct {
     uint16_t round_timer;           /* frames left of the banner */
     uint8_t countdown;              /* frames left of the round countdown: frozen above COUNTDOWN_GO */
     uint16_t wins[TEAM_COUNT];
-    uint8_t last_hit[TEAM_COUNT];   /* opponent attack_id that last hit this player */
-    uint16_t respawn[TEAM_COUNT];   /* frames until a dead player respawns */
-    uint16_t kos[TEAM_COUNT];       /* knockouts scored by each player */
+    uint8_t last_hit[MAX_PLAYERS][MAX_PLAYERS]; /* [player][opponent]: the opponent's
+                                                 * attack_id that last hit the player */
+    uint16_t respawn[MAX_PLAYERS];  /* frames until a dead player respawns */
+    uint16_t kos[MAX_PLAYERS];      /* knockouts scored by each player */
     JumpPad pads[MAX_PADS];
     uint8_t pad_count;
     /* Water fruit and its stream. */
@@ -177,21 +193,21 @@ typedef struct {
     uint8_t water_extend;           /* cells left to run on past the edge */
     uint8_t water_step_timer;
     uint16_t water_steps;
-    uint8_t water_owner, water_grace;
-    uint8_t caught[TEAM_COUNT];     /* carried by the water */
+    uint8_t water_owner, water_grace;   /* water_owner: player index */
+    uint8_t caught[MAX_PLAYERS];    /* carried by the water */
     uint8_t abilities;
-    uint16_t prev_buttons[TEAM_COUNT];
+    uint16_t prev_buttons[MAX_PLAYERS];
     uint32_t frame;
     uint32_t anim;                  /* frames not paused: clock for scenery and object
                                      * animation, which stops while paused (render
                                      * only, not hashed) */
-    uint8_t title;                  /* title screen: the sim waits for Start */
+    uint8_t title;                  /* 0 (play), TITLE_SCREEN or TITLE_SETUP: the sim waits */
     uint8_t paused;                 /* 0, PAUSE_MENU or PAUSE_CONTROLS */
     uint8_t menu_sel;               /* pause menu cursor, MENU_* */
-    uint8_t title_sel;              /* title screen row, TITLE_* */
+    uint8_t title_sel;              /* setup screen row, SETUP_* */
     uint8_t stage, stage_count;     /* level picked (index in the platform's level list), of how many;
                                        game_init sets 0 of 1, the platform sets both */
-    uint8_t backdrop;               /* BACKDROP_*: the level's, or the title screen's pick */
+    uint8_t backdrop;               /* BACKDROP_*: the level's */
     /* Wind gusts (ENT_WIND); hashed only when the level has wind. */
     WindZone winds[MAX_WINDS];
     uint8_t wind_count;
@@ -208,23 +224,31 @@ typedef struct {
  * the game). tuning may be NULL for the defaults in player_tuning.h. */
 void game_init(Game *g, const Level *lv, const PlayerTuning *tuning, uint8_t abilities);
 
-/* Show the title screen; the next Start or Jump starts a match. */
+/* Show the title screen; Start or Jump goes on to the setup screen. */
 void game_title(Game *g);
 
+/* Play with n players (2 .. MAX_PLAYERS) from a new round, as the setup
+ * screen does (replays with more than 2 players). */
+void game_set_players(Game *g, int n);
+
 /* Switch to another level (lv as for game_init) after Game.stage changed,
- * keeping the screen, the title screen's picks, the tuning and the frame
+ * keeping the screen, the setup screen's picks, the tuning and the frame
  * counter; the backdrop becomes the level's. */
 void game_set_level(Game *g, const Level *lv);
 
-/* in[0] = P1, in[1] = P2. */
-void game_tick(Game *g, const InputState in[TEAM_COUNT]);
+/* in[i] = player i + 1 (P1 .. P4; inputs of players not playing are read
+ * only on the title and setup screens). */
+void game_tick(Game *g, const InputState in[MAX_PLAYERS]);
+
+/* Team of player i. */
+static inline int game_team(int i) { return i % TEAM_COUNT; }
 
 /* Frames until zone z's next gust starts: 0 while one blows. During the
  * last WIND_WARN frames the gust is signaled. */
 uint16_t game_zone_calm(const Game *g, const WindZone *z);
 /* The least of game_zone_calm over all zones; 0xffff without wind. */
 uint16_t game_wind_calm(const Game *g);
-/* Sum of the forces of the zones a body is in (fx px/frame). */
+/* Sum of the forces of the sideways zones a body is in (fx px/frame). */
 int32_t game_wind_at(const Game *g, const Body *b);
 
 /* Hash of all simulation state, for replay tests. */

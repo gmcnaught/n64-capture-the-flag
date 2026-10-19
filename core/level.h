@@ -58,7 +58,8 @@ enum {
     ENT_WIND     = 9,   /* w x h zone of wind gusts (core/game.h WindZone): param peak
                          * force (Q8.8 px/frame, sign = first direction), flag cycle
                          * length and x2 gust length (frames), y2 bit 0 direction
-                         * alternates, bit 1 drawn as dust, bits 2-14 phase (frames) */
+                         * alternates, bit 1 drawn as dust, bits 2-14 phase (frames),
+                         * bit 15 a geyser (pushes up, LDtk entity Geyser) */
     ENT_PLATFORM = 10,  /* moving solid, w x h, from (x, y) to (x2, y2) and back (core/game.h
                          * Platform): param speed (Q8.8 px/frame along the longer axis),
                          * flag bit 0 one-way, bits 1-15 phase (frames into its cycle) */
@@ -97,8 +98,8 @@ typedef struct {
     uint8_t active, oneway;
 } Solid;
 
-/* Moving platforms, plus the other player (core/game.c). */
-#define LEVEL_MAX_SOLIDS 9
+/* Moving platforms, plus the other players (core/game.c). */
+#define LEVEL_MAX_SOLIDS 11
 
 typedef struct Level {
     uint16_t cell_w, cell_h;

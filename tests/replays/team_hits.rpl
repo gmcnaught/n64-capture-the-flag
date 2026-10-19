@@ -1,0 +1,48 @@
+# team_hits Arena, 4 players (P3 by P1, P4 by P2). P3 faces P1 and
+level arena.lvl
+players 4
+abilities 7
+tune fruit_min 0x0000ea60
+230 C / C
+1 C / C / RC
+1 C / C / C
+2 C / C / AC
+13 C / C / C
+1 C / C / C / LC
+1 C / C / C / C
+2 C / C / C / AC
+15 C / C / C / C
+2 C / C / C / LC
+39 C / C / C / LJC
+1 C / C / C / C
+15 C / C / C / RC
+2 C / C / C / RJC
+1 C / C / C / RC
+23 C / C / C / RJC
+5 C / C / C / C
+2 C / C
+2 C / RC
+15 C / RJC
+1 C / RC
+30 C / RJC
+6 C / C
+2 C / LC
+7 C / JC
+1 C / C
+23 C / JC
+1 C / C
+24 C / LC
+27 C / LJC
+1 C / LC
+35 C / LJC
+33 C / C
+3 C / LC
+2 C / DC
+2 C / DJC
+10 C / C
+1 C / RC
+1 C / C
+2 C / AC
+43 C / C
+hash b6cc1976
+kos 0 0 0 0

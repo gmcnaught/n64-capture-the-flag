@@ -103,11 +103,19 @@ static void read_entities(Game *g)
             if (e.flag > e.x2 && e.x2 > 2 * WIND_RAMP && e.param && g->wind_count < MAX_WINDS) {
                 WindZone *z = &g->winds[g->wind_count++];
                 *z = (WindZone){e.x, e.y, (int16_t)e.w, (int16_t)e.h, (int32_t)e.param << 8,
-                                e.flag, (uint16_t)e.x2, (uint16_t)((uint16_t)e.y2 >> 2),
-                                (uint8_t)(e.y2 & 1), (uint8_t)((e.y2 >> 1) & 1), 0, 0};
+                                e.flag, (uint16_t)e.x2, (uint16_t)(((uint16_t)e.y2 >> 2) & 0x1fff),
+                                (uint8_t)(e.y2 & 1), (uint8_t)((e.y2 >> 1) & 1),
+                                (uint8_t)((uint16_t)e.y2 >> 15), 0, 0};
             }
             break;
         }
+    }
+    /* P3, P4: next to P1, P2, TEAMMATE_GAP apart, on the side away from the middle. */
+    for (int i = TEAM_COUNT; i < MAX_PLAYERS; i++) {
+        int m = i - TEAM_COUNT, dir = g->spawn_x[m] + PLAYER_HIT_W / 2 < lv->px_w / 2 ? -1 : 1;
+        g->spawn_y[i] = g->spawn_y[m];
+        g->spawn_x[i] = free_x(lv, (int16_t)(g->spawn_x[m] + dir * (PLAYER_HIT_W + TEAMMATE_GAP)),
+                               g->spawn_y[i]);
     }
 }
 
@@ -119,7 +127,8 @@ static void spawn_player(Game *g, int t)
     p->facing = (int8_t)(g->spawn_x[t] + PLAYER_HIT_W / 2 < g->lv.px_w / 2 ? -1 : 1);
     p->invuln = (uint8_t)g->tuning.invuln_frames;
     g->respawn[t] = 0;
-    g->last_hit[1 - t] = 0;     /* this player's attack ids restart at 1 */
+    for (int o = 0; o < MAX_PLAYERS; o++)
+        g->last_hit[o][t] = 0;  /* this player's attack ids restart at 1 */
 }
 
 static void flag_home(Flag *f)
@@ -200,11 +209,13 @@ static void new_round(Game *g)
     g->fruit_active = 0;
     g->fruit_timer = fruit_interval(g);
     g->water_len = 0;
-    g->caught[0] = g->caught[1] = 0;
     for (int i = 0; i < g->flag_count; i++)
         flag_home(&g->flags[i]);
-    for (int t = 0; t < TEAM_COUNT; t++) {
+    for (int t = 0; t < MAX_PLAYERS; t++) {
+        g->caught[t] = 0;
         g->carrying[t] = -1;
+    }
+    for (int t = 0; t < g->player_count; t++) {
         spawn_player(g, t);
         g->players[t].invuln = 0;
     }
@@ -231,16 +242,32 @@ uint16_t game_wind_calm(const Game *g)
     return calm;
 }
 
-int32_t game_wind_at(const Game *g, const Body *b)
+/* Sum of the forces of the zones a body is in, geysers (up) or the others. */
+static int32_t zones_at(const Game *g, const Body *b, int up)
 {
     int32_t f = 0;
     for (int i = 0; i < g->wind_count; i++) {
         const WindZone *z = &g->winds[i];
-        if (z->force && b->x < z->x + z->w && b->x + b->w > z->x && b->y < z->y + z->h &&
-            b->y + b->h > z->y)
+        if (z->force && z->up == up && b->x < z->x + z->w && b->x + b->w > z->x &&
+            b->y < z->y + z->h && b->y + b->h > z->y)
             f += z->force;
     }
     return f;
+}
+
+int32_t game_wind_at(const Game *g, const Body *b)
+{
+    return zones_at(g, b, 0);
+}
+
+/* A geyser lifts a body: its rising speed grows by the force, up to WIND_LIFT_MAX. */
+static void geyser_lift(const Game *g, Body *b)
+{
+    int32_t f = zones_at(g, b, 1);
+    if (f && b->vy - f > -WIND_LIFT_MAX)
+        b->vy -= f;
+    else if (f)
+        b->vy = b->vy < -WIND_LIFT_MAX ? b->vy : -WIND_LIFT_MAX;
 }
 
 /* Each zone's gust for this frame (force, dir), and the warning sound. */
@@ -270,7 +297,9 @@ static void update_wind(Game *g)
 static void new_match(Game *g)
 {
     for (int t = 0; t < TEAM_COUNT; t++)
-        g->wins[t] = g->kos[t] = 0;
+        g->wins[t] = 0;
+    for (int t = 0; t < MAX_PLAYERS; t++)
+        g->kos[t] = 0;
     g->title = g->paused = 0;
     g->menu_sel = MENU_RESUME;
     new_round(g);
@@ -279,7 +308,13 @@ static void new_match(Game *g)
 void game_title(Game *g)
 {
     new_match(g);
-    g->title = 1;
+    g->title = TITLE_SCREEN;
+}
+
+void game_set_players(Game *g, int n)
+{
+    g->player_count = (uint8_t)(n < TEAM_COUNT ? TEAM_COUNT : n > MAX_PLAYERS ? MAX_PLAYERS : n);
+    new_round(g);
 }
 
 void game_init(Game *g, const Level *lv, const PlayerTuning *tuning, uint8_t abilities)
@@ -292,6 +327,7 @@ void game_init(Game *g, const Level *lv, const PlayerTuning *tuning, uint8_t abi
         tuning_defaults(&g->tuning);
     g->abilities = abilities;
     g->rng = 0x2545f491u;
+    g->player_count = TEAM_COUNT;
     g->stage_count = 1;
     g->backdrop = lv->backdrop < BACKDROP_COUNT ? lv->backdrop : BACKDROP_FOREST;
     read_entities(g);
@@ -307,8 +343,10 @@ void game_set_level(Game *g, const Level *lv)
     g->title_sel = keep.title_sel;
     g->stage = keep.stage;
     g->stage_count = keep.stage_count;
-    for (int t = 0; t < TEAM_COUNT; t++)
+    for (int t = 0; t < MAX_PLAYERS; t++)
         g->prev_buttons[t] = keep.prev_buttons[t];
+    if (keep.player_count != g->player_count)
+        game_set_players(g, keep.player_count);
 }
 
 /* ---- flags ------------------------------------------------------------------ */
@@ -360,6 +398,7 @@ static void drop_and_send_home(Game *g, int t)
     send_home(g, t);
 }
 
+/* Can a player of team t take flag f? */
 static int can_take(const Flag *f, int t)
 {
     switch (f->state) {
@@ -384,6 +423,7 @@ static void update_flags(Game *g)
             fx wind = game_wind_at(g, b);
             if (wind)                       /* a gust blows it along */
                 body_move_x(b, wind, &g->lv);
+            geyser_lift(g, b);
             b->vy += g->tuning.gravity;
             if (b->vy > g->tuning.fall_max)
                 b->vy = g->tuning.fall_max;
@@ -393,14 +433,15 @@ static void update_flags(Game *g)
                 flag_home(f);               /* fell out of the arena */
         }
     }
-    for (int t = 0; t < TEAM_COUNT; t++) {
+    for (int t = 0; t < g->player_count; t++) {
         Player *p = &g->players[t];
+        int team = game_team(t);
         if (!alive(p) || g->caught[t])
             continue;
         if (g->carrying[t] < 0) {
             for (int i = 0; i < g->flag_count; i++) {
                 Flag *f = &g->flags[i];
-                if (can_take(f, t) && body_overlap(&p->body, &f->body)) {
+                if (can_take(f, team) && body_overlap(&p->body, &f->body)) {
                     uint8_t from_goal = f->state == FS_PLACED ? f->holder : 0xff;
                     f->state = FS_CARRIED;
                     f->holder = (uint8_t)t;
@@ -415,23 +456,24 @@ static void update_flags(Game *g)
         }
         Flag *f = &g->flags[g->carrying[t]];
         const Body *pb = &p->body;
-        if (f->team != t && overlap(pb->x, pb->y, pb->w, pb->h, g->goal_x[t], g->goal_y[t],
-                                    g->goal_w[t], g->goal_h[t])) {
+        if (f->team != team && overlap(pb->x, pb->y, pb->w, pb->h, g->goal_x[team], g->goal_y[team],
+                                       g->goal_w[team], g->goal_h[team])) {
             f->state = FS_PLACED;
+            f->holder = (uint8_t)team;
             f->body.vy = 0;
             g->carrying[t] = -1;
-            int placed = layout_goal(g, t), enemy = 0;
+            int placed = layout_goal(g, team), enemy = 0;
             for (int i = 0; i < g->flag_count; i++)
-                enemy += g->flags[i].team != t;
+                enemy += g->flags[i].team != team;
             g->sfx |= SFX_BIT(SFX_SAVE);
             if (placed == enemy) {
-                g->winner = (uint8_t)(t + 1);
+                g->winner = (uint8_t)(team + 1);
                 g->round_timer = ROUND_END_FRAMES;
-                g->wins[t]++;
+                g->wins[team]++;
             }
-        } else if (f->team == t && overlap(pb->x, pb->y, pb->w, pb->h, g->home_x0[t], g->home_y0[t],
-                                           g->home_x1[t] - g->home_x0[t],
-                                           g->home_y1[t] - g->home_y0[t])) {
+        } else if (f->team == team && overlap(pb->x, pb->y, pb->w, pb->h, g->home_x0[team],
+                                              g->home_y0[team], g->home_x1[team] - g->home_x0[team],
+                                              g->home_y1[team] - g->home_y0[team])) {
             flag_home(f);
             g->carrying[t] = -1;
             g->sfx |= SFX_BIT(SFX_SAVE);
@@ -447,25 +489,34 @@ static int stands_on(const Body *a, const Body *b)
     return a->y + a->h == b->y && a->x < b->x + b->w && a->x + a->w > b->x;
 }
 
-/* Collision between the players applies while both are alive and their
- * bodies do not already overlap. */
-static int bodies_collide(const Game *g)
+/* Collision between players a and b applies while both are alive and
+ * their bodies do not already overlap. */
+static int collide(const Game *g, int a, int b)
 {
-    const Player *a = &g->players[0], *b = &g->players[1];
-    return alive(a) && alive(b) && !g->caught[0] && !g->caught[1] &&
-           !body_overlap(&a->body, &b->body);
+    const Player *pa = &g->players[a], *pb = &g->players[b];
+    return alive(pa) && alive(pb) && !g->caught[a] && !g->caught[b] &&
+           !body_overlap(&pa->body, &pb->body);
 }
 
-/* The other player as the solid after the platforms. */
-static void set_extra_solid(Game *g, const Body *b)
+/* Another player as a solid, after the platforms. */
+static void add_extra_solid(Game *g, const Body *b)
 {
-    g->lv.solids[g->platform_count] = (Solid){b->x, b->y, b->w, b->h, 1, 0};
-    g->lv.solid_count = (uint8_t)(g->platform_count + 1);
+    g->lv.solids[g->lv.solid_count++] = (Solid){b->x, b->y, b->w, b->h, 1, 0};
 }
 
 static void clear_extra_solid(Game *g)
 {
     g->lv.solid_count = g->platform_count;
+}
+
+/* Players standing on player u (bit per player). */
+static uint8_t riders_of(const Game *g, int u)
+{
+    uint8_t m = 0;
+    for (int r = 0; r < g->player_count; r++)
+        if (r != u && collide(g, u, r) && stands_on(&g->players[r].body, &g->players[u].body))
+            m |= (uint8_t)(1u << r);
+    return m;
 }
 
 /* After the player underneath moved, a rider it moved into is lifted onto
@@ -483,6 +534,17 @@ static void lift_rider(Game *g, Player *under, Player *rider)
         if (u->vy < 0)
             u->vy = 0;
     }
+}
+
+/* Lift the riders (mask) of player u after it moved, and theirs in turn. */
+static void lift_riders(Game *g, int u, uint8_t mask)
+{
+    for (int r = 0; r < g->player_count; r++)
+        if (mask & (1u << r)) {
+            uint8_t up = (uint8_t)(riders_of(g, r) & ~(1u << u));
+            lift_rider(g, &g->players[u], &g->players[r]);
+            lift_riders(g, r, up);
+        }
 }
 
 /* ---- moving platforms (Celeste "Solid" model, from n64-platformer) -------- */
@@ -507,11 +569,11 @@ static int on_top(const Body *b, const Solid *s)
 static void solid_move(Game *g, int i, int dx, int dy)
 {
     Solid *s = &g->lv.solids[i];
-    Body *bodies[TEAM_COUNT + MAX_GAME_FLAGS];
-    int8_t who[TEAM_COUNT + MAX_GAME_FLAGS];
-    uint8_t riding[TEAM_COUNT + MAX_GAME_FLAGS];
+    Body *bodies[MAX_PLAYERS + MAX_GAME_FLAGS];
+    int8_t who[MAX_PLAYERS + MAX_GAME_FLAGS];    /* player index, or MAX_PLAYERS + flag */
+    uint8_t riding[MAX_PLAYERS + MAX_GAME_FLAGS];
     int n = 0;
-    for (int t = 0; t < TEAM_COUNT; t++) {
+    for (int t = 0; t < g->player_count; t++) {
         Player *p = &g->players[t];
         if (!alive(p) || g->caught[t])
             continue;
@@ -520,15 +582,19 @@ static void solid_move(Game *g, int i, int dx, int dy)
         riding[n] = on_top(&p->body, s) && !(s->oneway && p->drop);
         n++;
     }
-    /* A player standing on a rider rides too. */
-    if (n == TEAM_COUNT && bodies_collide(g))
-        for (int k = 0; k < TEAM_COUNT; k++)
-            if (!riding[k] && riding[1 - k] && stands_on(bodies[k], bodies[1 - k]))
-                riding[k] = 1;
+    /* A player standing on a rider rides too (up a stack). */
+    for (int pass = 1, more = 1; more && pass < n; pass++) {
+        more = 0;
+        for (int k = 0; k < n; k++)
+            for (int j = 0; j < n && !riding[k]; j++)
+                if (riding[j] && j != k && collide(g, who[k], who[j]) &&
+                    stands_on(bodies[k], bodies[j]))
+                    riding[k] = more = 1;
+    }
     for (int f = 0; f < g->flag_count; f++)
         if (g->flags[f].state == FS_DROPPED) {
             bodies[n] = &g->flags[f].body;
-            who[n] = (int8_t)(TEAM_COUNT + f);
+            who[n] = (int8_t)(MAX_PLAYERS + f);
             riding[n] = on_top(bodies[n], s);
             n++;
         }
@@ -537,7 +603,7 @@ static void solid_move(Game *g, int i, int dx, int dy)
         s->active = 0;
         for (int k = 0; k < n; k++) {
             Body *b = bodies[k];
-            if (!s->oneway && who[k] < TEAM_COUNT && body_overlap_box(b, s)) {
+            if (!s->oneway && who[k] < MAX_PLAYERS && body_overlap_box(b, s)) {
                 int amt = dx > 0 ? s->x + s->w - b->x : s->x - (b->x + b->w);
                 if (body_move_x(b, FX(amt), &g->lv))
                     squish(g, who[k]);
@@ -553,7 +619,7 @@ static void solid_move(Game *g, int i, int dx, int dy)
         s->active = 0;
         for (int k = 0; k < n; k++) {
             Body *b = bodies[k];
-            if (!s->oneway && who[k] < TEAM_COUNT && body_overlap_box(b, s)) {
+            if (!s->oneway && who[k] < MAX_PLAYERS && body_overlap_box(b, s)) {
                 int amt = dy > 0 ? s->y + s->h - b->y : s->y - (b->y + b->h);
                 if (body_move_y(b, FX(amt), &g->lv, 0))
                     squish(g, who[k]);
@@ -561,7 +627,7 @@ static void solid_move(Game *g, int i, int dx, int dy)
                 body_move_y(b, FX(dy), &g->lv, 0);
             } else if (s->oneway && dy < 0 && b->vy >= 0 && b->y + b->h > s->y &&
                        b->y + b->h <= top && b->x < s->x + s->w && b->x + b->w > s->x &&
-                       !(who[k] < TEAM_COUNT && g->players[who[k]].drop)) {
+                       !(who[k] < MAX_PLAYERS && g->players[who[k]].drop)) {
                 body_move_y(b, FX(s->y - (b->y + b->h)), &g->lv, 0);   /* rising under its feet */
             }
         }
@@ -704,7 +770,7 @@ static void update_water(Game *g)
     }
     if (g->fruit_active) {
         int fx = g->fruit_spot_x[g->fruit_spot], fy = g->fruit_spot_y[g->fruit_spot];
-        for (int t = 0; t < TEAM_COUNT; t++) {
+        for (int t = 0; t < g->player_count; t++) {
             const Player *p = &g->players[t];
             if (!alive(p) || g->caught[t] ||
                 !overlap(p->body.x, p->body.y, p->body.w, p->body.h, fx, fy, TILE_W, TILE_H))
@@ -738,7 +804,7 @@ static void update_water(Game *g)
         int nx = 0, ny = 0;
         if (!g->water_draining && !water_next(g, &nx, &ny)) {
             g->water_draining = 1;
-            for (int t = 0; t < TEAM_COUNT; t++)
+            for (int t = 0; t < g->player_count; t++)
                 if (g->caught[t])
                     water_release(g, t);
         }
@@ -757,7 +823,7 @@ static void update_water(Game *g)
             g->water_steps++;
         }
     }
-    for (int t = 0; t < TEAM_COUNT; t++) {
+    for (int t = 0; t < g->player_count; t++) {
         Player *p = &g->players[t];
         if (g->caught[t]) {
             water_hold(g, t);
@@ -785,29 +851,35 @@ int game_attack_box(const Game *g, const Player *p, int *x, int *y, int *w, int 
     return player_attack_box(p, &g->tuning, x, y, w, h);
 }
 
-/* Player t's attack against the opponent: each swing hits once. A down-hit
- * bounces the attacker (pogo). A carrier drops the flag and goes home. */
+/* Player t's attack against the other team's players (teammates are not
+ * hit): each swing hits each once. A down-hit bounces the attacker (pogo).
+ * A carrier drops the flag and goes home. */
 static void resolve_attack(Game *g, int t)
 {
-    Player *p = &g->players[t], *o = &g->players[1 - t];
-    int ax, ay, aw, ah;
+    Player *p = &g->players[t];
+    int ax, ay, aw, ah, hit = 0;
     if (!alive(p) || !player_attack_box(p, &g->tuning, &ax, &ay, &aw, &ah))
         return;
-    const Body *pb = &p->body, *ob = &o->body;
-    if (!alive(o) || o->invuln || g->caught[1 - t] || g->last_hit[1 - t] == p->attack_id ||
-        !overlap(ax, ay, aw, ah, ob->x, ob->y, ob->w, ob->h))
-        return;
-    g->last_hit[1 - t] = p->attack_id;
-    int dir = p->attack_dir == ATK_SIDE ? p->facing
-            : (ob->x + ob->w / 2 >= pb->x + pb->w / 2 ? 1 : -1);
-    if (g->carrying[1 - t] >= 0) {
-        drop_and_send_home(g, 1 - t);
-    } else if (player_damage(o, &g->tuning, dir)) {
-        g->sfx |= SFX_BIT(o->health ? SFX_HIT : SFX_KILL);
-        if (o->health == 0)
-            g->kos[t]++;
+    const Body *pb = &p->body;
+    for (int v = 0; v < g->player_count; v++) {
+        Player *o = &g->players[v];
+        const Body *ob = &o->body;
+        if (game_team(v) == game_team(t) || !alive(o) || o->invuln || g->caught[v] ||
+            g->last_hit[v][t] == p->attack_id || !overlap(ax, ay, aw, ah, ob->x, ob->y, ob->w, ob->h))
+            continue;
+        g->last_hit[v][t] = p->attack_id;
+        int dir = p->attack_dir == ATK_SIDE ? p->facing
+                : (ob->x + ob->w / 2 >= pb->x + pb->w / 2 ? 1 : -1);
+        if (g->carrying[v] >= 0) {
+            drop_and_send_home(g, v);
+        } else if (player_damage(o, &g->tuning, dir)) {
+            g->sfx |= SFX_BIT(o->health ? SFX_HIT : SFX_KILL);
+            if (o->health == 0)
+                g->kos[t]++;
+        }
+        hit = 1;
     }
-    if (p->attack_dir == ATK_DOWN && !p->attack_pogo)
+    if (hit && p->attack_dir == ATK_DOWN && !p->attack_pogo)
         player_pogo(p, &g->tuning);
 }
 
@@ -846,47 +918,62 @@ static void pause_menu(Game *g, uint16_t pressed)
     }
 }
 
-/* Title screen rows: Up/Down pick one, Left/Right change it (wrapping). */
-static void title_menu(Game *g, uint16_t pressed)
+/* Setup screen rows: Up/Down pick one, Left/Right change it (wrapping). */
+static void setup_menu(Game *g, uint16_t pressed)
 {
     if (pressed & (BTN_UP | BTN_DOWN)) {
-        int step = (pressed & BTN_UP) ? TITLE_ROWS - 1 : 1;
-        g->title_sel = (uint8_t)((g->title_sel + step) % TITLE_ROWS);
+        int step = (pressed & BTN_UP) ? SETUP_ROWS - 1 : 1;
+        g->title_sel = (uint8_t)((g->title_sel + step) % SETUP_ROWS);
         g->sfx |= SFX_BIT(SFX_MENU);
     }
     int step = (pressed & BTN_RIGHT) ? 1 : (pressed & BTN_LEFT) ? -1 : 0;
     if (!step)
         return;
-    if (g->title_sel == TITLE_STAGE) {
+    if (g->title_sel == SETUP_STAGE) {
         if (g->stage_count < 2)
             return;
         g->stage = (uint8_t)((g->stage + step + g->stage_count) % g->stage_count);
     } else {
-        g->backdrop = (uint8_t)((g->backdrop + step + BACKDROP_COUNT) % BACKDROP_COUNT);
+        int choices = MAX_PLAYERS - TEAM_COUNT + 1;
+        game_set_players(g, TEAM_COUNT + (g->player_count - TEAM_COUNT + step + choices) % choices);
     }
     g->sfx |= SFX_BIT(SFX_MENU);
 }
 
 /* ---- tick ------------------------------------------------------------------ */
 
-void game_tick(Game *g, const InputState in[TEAM_COUNT])
+void game_tick(Game *g, const InputState in[MAX_PLAYERS])
 {
-    uint16_t pressed[TEAM_COUNT];
-    for (int t = 0; t < TEAM_COUNT; t++) {
+    uint16_t pressed[MAX_PLAYERS], any = 0, all = 0;   /* any: players playing; all: every pad */
+    int n = g->player_count;
+    for (int t = 0; t < MAX_PLAYERS; t++) {
         pressed[t] = in[t].buttons & (uint16_t)~g->prev_buttons[t];
         g->prev_buttons[t] = in[t].buttons;
+        all |= pressed[t];
+        if (t < n)
+            any |= pressed[t];
     }
     g->sfx = 0;
     g->frame++;
     if (!g->paused)
         g->anim++;
 
-    if (g->title) {                 /* title screen: the sim waits */
-        if ((pressed[0] | pressed[1]) & (BTN_START | BTN_JUMP)) {
+    if (g->title == TITLE_SCREEN) {     /* title screen: the sim waits */
+        if (all & (BTN_START | BTN_JUMP)) {
+            g->title = TITLE_SETUP;
+            g->sfx |= SFX_BIT(SFX_MENU);
+        }
+        return;
+    }
+    if (g->title == TITLE_SETUP) {      /* setup screen: the sim waits */
+        if (all & (BTN_START | BTN_JUMP)) {
             new_match(g);
             g->sfx |= SFX_BIT(SFX_MENU);
+        } else if (all & BTN_ATTACK) {
+            g->title = TITLE_SCREEN;
+            g->sfx |= SFX_BIT(SFX_MENU);
         } else {
-            title_menu(g, pressed[0] | pressed[1]);
+            setup_menu(g, all);
         }
         return;
     }
@@ -896,20 +983,20 @@ void game_tick(Game *g, const InputState in[TEAM_COUNT])
         return;
     }
     if (g->paused == PAUSE_CONTROLS) {  /* controls screen: back to the menu */
-        if ((pressed[0] | pressed[1]) & (BTN_START | BTN_JUMP | BTN_ATTACK)) {
+        if (any & (BTN_START | BTN_JUMP | BTN_ATTACK)) {
             g->paused = PAUSE_MENU;
             g->sfx |= SFX_BIT(SFX_MENU);
         }
         return;
     }
-    if ((pressed[0] | pressed[1]) & BTN_START) {
+    if (any & BTN_START) {
         g->paused = g->paused ? 0 : PAUSE_MENU;
         g->menu_sel = MENU_RESUME;
         g->sfx |= SFX_BIT(SFX_MENU);
         return;
     }
     if (g->paused) {
-        pause_menu(g, pressed[0] | pressed[1]);
+        pause_menu(g, any);
         return;
     }
     if (g->countdown > COUNTDOWN_GO) {  /* round countdown: the sim waits */
@@ -924,18 +1011,21 @@ void game_tick(Game *g, const InputState in[TEAM_COUNT])
         g->countdown--;
     if (g->wind_count) {
         update_wind(g);
-        for (int t = 0; t < TEAM_COUNT; t++)
-            g->players[t].push_x = game_wind_at(g, &g->players[t].body);
+        for (int t = 0; t < n; t++) {
+            Player *p = &g->players[t];
+            p->push_x = game_wind_at(g, &p->body);
+            if (alive(p) && !g->caught[t] && p->state != PS_CLIMB && p->state != PS_DASH)
+                geyser_lift(g, &p->body);
+        }
     }
     g->round_frame++;
     update_platforms(g);
 
-    uint8_t stacked_before[TEAM_COUNT];     /* the other player stood on t */
-    for (int t = 0; t < TEAM_COUNT; t++)
-        stacked_before[t] = bodies_collide(g) &&
-                            stands_on(&g->players[1 - t].body, &g->players[t].body);
-    for (int t = 0; t < TEAM_COUNT; t++) {
-        Player *p = &g->players[t], *o = &g->players[1 - t];
+    uint8_t stacked_before[MAX_PLAYERS];    /* riders_of each player */
+    for (int t = 0; t < n; t++)
+        stacked_before[t] = riders_of(g, t);
+    for (int t = 0; t < n; t++) {
+        Player *p = &g->players[t];
         if (p->dead) {
             if (++g->respawn[t] >= RESPAWN_FRAMES)
                 spawn_player(g, t);
@@ -951,35 +1041,33 @@ void game_tick(Game *g, const InputState in[TEAM_COUNT])
             ppressed &= (uint16_t)~(BTN_DASH | BTN_ATTACK);
             mod.run_speed = mod.carry_speed;
         }
-        /* The other player is a solid, except when it rides on t (t moves
-         * freely and lifts it afterwards). */
-        int collide = bodies_collide(g);
-        int ridden = collide && stands_on(&o->body, &p->body);
-        if (ridden) {               /* weighed down */
+        /* The other players are solids, except those riding on t (t moves
+         * freely and lifts them afterwards). */
+        uint8_t riders = riders_of(g, t);
+        if (riders) {               /* weighed down */
             if (mod.weight_speed < mod.run_speed)
                 mod.run_speed = mod.weight_speed;
             mod.jump_speed = mod.double_jump_speed = mod.weight_jump;
         }
-        if (collide && !ridden)
-            set_extra_solid(g, &o->body);
+        for (int o = 0; o < n; o++)
+            if (o != t && !(riders & (1u << o)) && collide(g, t, o))
+                add_extra_solid(g, &g->players[o].body);
         player_tick(p, &g->lv, &mod, &pin, ppressed);
         clear_extra_solid(g);
-        if (ridden)
-            lift_rider(g, p, o);
+        lift_riders(g, t, riders);
     }
     /* A rider landing on a rising player stops that jump. */
-    for (int t = 0; t < TEAM_COUNT; t++) {
+    for (int t = 0; t < n; t++) {
         Player *p = &g->players[t];
-        if (!stacked_before[t] && bodies_collide(g) &&
-            stands_on(&g->players[1 - t].body, &p->body) && p->body.vy < 0) {
+        if (riders_of(g, t) & ~stacked_before[t] && p->body.vy < 0) {
             p->body.vy = 0;
             p->body.rem_y = 0;
             p->jumping = 0;
         }
     }
-    for (int t = 0; t < TEAM_COUNT; t++)
+    for (int t = 0; t < n; t++)
         resolve_attack(g, t);
-    for (int t = 0; t < TEAM_COUNT; t++) {
+    for (int t = 0; t < n; t++) {
         Player *p = &g->players[t];
         Body *b = &p->body;
         if (!alive(p) || g->caught[t])
@@ -998,7 +1086,7 @@ void game_tick(Game *g, const InputState in[TEAM_COUNT])
     for (int i = 0; i < g->pad_count; i++)
         if (g->pads[i].timer)
             g->pads[i].timer--;
-    for (int t = 0; t < TEAM_COUNT; t++)
+    for (int t = 0; t < n; t++)
         g->sfx |= g->players[t].sfx;
 }
 
@@ -1064,7 +1152,7 @@ uint32_t game_hash(const Game *g)
     }
     for (int t = 0; t < TEAM_COUNT; t++) {
         h = hash_player(h, &g->players[t]);
-        h = mix(h, g->last_hit[t] | (uint32_t)g->respawn[t] << 8);
+        h = mix(h, g->last_hit[t][1 - t] | (uint32_t)g->respawn[t] << 8);
         h = mix(h, g->kos[t] | (uint32_t)g->prev_buttons[t] << 16);
         h = mix(h, (uint16_t)g->spawn_x[t] | (uint32_t)(uint16_t)g->spawn_y[t] << 16);
     }
@@ -1087,6 +1175,19 @@ uint32_t game_hash(const Game *g)
     for (int i = 0; i < g->water_len; i++)
         h = mix(h, (uint16_t)g->water_cx[i] | (uint32_t)(uint16_t)g->water_cy[i] << 16);
     h = mix(h, g->caught[0] | (uint32_t)g->caught[1] << 8);
+    if (g->player_count > TEAM_COUNT) {         /* 2-player replays keep their hashes */
+        h = mix(h, g->player_count);
+        for (int t = TEAM_COUNT; t < g->player_count; t++) {
+            h = hash_player(h, &g->players[t]);
+            h = mix(h, g->respawn[t] | (uint32_t)(uint8_t)g->carrying[t] << 16 |
+                       (uint32_t)g->caught[t] << 24);
+            h = mix(h, g->kos[t] | (uint32_t)g->prev_buttons[t] << 16);
+            h = mix(h, (uint16_t)g->spawn_x[t] | (uint32_t)(uint16_t)g->spawn_y[t] << 16);
+        }
+        for (int t = 0; t < g->player_count; t++)
+            for (int o = 0; o < g->player_count; o++)
+                h = mix(h, g->last_hit[t][o]);
+    }
     int fields = tuning_field_count;
     if (!(g->lv.surfaces & (1u << SURFACE_ICE)))
         fields -= ICE_TUNING_FIELDS;            /* earlier replays keep their hashes */

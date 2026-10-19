@@ -1,6 +1,6 @@
 # Capture the Flag
 
-A fast, fun two-player capture-the-flag game for the Nintendo 64. Built
+A fast, fun capture-the-flag game for two to four players on the Nintendo 64. Built
 with libdragon and SDL3, so the same game plays on the N64 and on PC.
 
 ![Blue steals a red flag; red kicks the carrier and takes the flag home](screenshots/gameplay.gif)
@@ -14,15 +14,17 @@ with libdragon and SDL3, so the same game plays on the N64 and on PC.
 
 **N64:** download `capture-the-flag.z64` from the
 [latest release](https://github.com/gmcnaught/n64-capture-the-flag/releases/latest)
-and run it on the MiSTer N64 core or in the ares emulator. Plug in two
-controllers.
+and run it on the MiSTer N64 core or in the ares emulator. Plug in two to
+four controllers.
 
 **PC:** build it from source (below) and run `make run`. Two players share
-the keyboard, or plug in gamepads.
+the keyboard, or plug in gamepads (players 3 and 4: gamepads 3 and 4).
 
 ## How to play
 
-Red against blue in one arena. Each team keeps three flags by its start.
+Red against blue in one arena, one or two players a team (P3, light red,
+plays with P1; P4, dark blue, with P2; teammates can't hit each other).
+Each team keeps three flags by its start.
 
 - **Steal** the other team's flags and carry them, one at a time, up to
   your goal ledge. Get all three there to win the round.
@@ -30,26 +32,29 @@ Red against blue in one arena. Each team keeps three flags by its start.
   drop the flag and go back to their start.
 - **Defend:** grab your own dropped flag and carry it home.
 - **Fight:** kick to knock off hearts; lose them all and you respawn.
-- **Stack:** stand on your opponent to weigh them down, or land on them to
+- **Stack:** stand on another player to weigh them down, or land on them to
   stop their jump.
 - **Water fruit:** now and then a fruit appears up top. Touch it and a
   stream of water pours down the platforms, sweeping up anyone in its way.
 
 Every round starts with a 3, 2, 1, GO! countdown. Press Start to pause; the
-pause menu has a CONTROLS screen. Pick the stage (Arena, Forest, Desert,
-Snow, Lava, Sky) and the background on the title screen with up/down and
-left/right. On Snow, the pale blue ground is ice: you speed up and slow
-down slowly there, so a dash or a run slides on. On Desert, a dust storm
+pause menu has a CONTROLS screen. Start on the title screen opens the
+match setup: pick the stage (Arena, Forest, Desert, Snow, Lava, Sky) and
+the players (1 VS 1, 2 VS 1, 2 VS 2) with up/down and left/right, then
+Start. On Snow, the ground is ice: you speed up and slow down slowly
+there, so a dash or a run slides on. On Desert, a dust storm
 hangs over each of the two long side platforms and every few seconds
 blows outward, pushing players and dropped flags off toward the walls;
 the dust thickens and a whoosh sounds just before it blows. On Sky,
 platforms move: clouds slide along the sides and carry whoever stands on
-them (jump up through them, drop down with Down + A); a block in the
-middle goes up and down between the top and the middle landing, a lift
-for anyone on top and a crusher for anyone under it; two low blocks
-slide to the pillar and back, shoving players aside. A player crushed
+them (jump up through them, drop down with Down + A); two blocks either
+side of the pillar go up and down, lifts for anyone on top; two blocks
+slide from the side walls to the pillar and back, shoving players
+aside. A player crushed
 against a wall or floor goes back to its start without losing a heart,
-dropping any flag it carries.
+dropping any flag it carries. On Lava, a geyser over each floor bump
+bubbles, then erupts every few seconds, throwing anyone standing in it
+(and dropped flags) high up out of the low ground.
 
 ## Controls
 

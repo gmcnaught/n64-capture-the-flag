@@ -20,9 +20,10 @@
  *
  * Keys: P1 WASD move, Space jump, F attack, Left Shift dash; P2 arrows
  * move, Right Shift jump, / attack, . dash; Enter start / pause (menu:
- * up/down, jump picks; title screen: up/down row, left/right stage or
- * background). Gamepad 1 also controls P1, gamepad 2 P2. Starts on the
- * title screen (a replay starts in play).
+ * up/down, jump picks; setup screen: up/down row, left/right stage or
+ * players, B back). Gamepad 1 also controls P1, gamepad 2 P2; gamepads 3
+ * and 4 are P3 and P4 (no keys). Starts on the title screen (a replay
+ * starts in play).
  * Debug: Backspace restart (skips the title), Tab next level, P freeze, N step one frame
  * (frozen), F1 debug overlay, F2 tuning panel ([ ] select, - = adjust,
  * Shift = x16, F5 write core/player_tuning.h, F9 defaults), F11 /
@@ -138,6 +139,19 @@ static int dropped_flag_x(const Game *g)
     return -1;
 }
 
+/* Moving platform positions "x,y,x,y,..." in Game.platforms order, or "-" (trace). */
+static const char *platform_list(const Game *g)
+{
+    static char out[LEVEL_MAX_SOLIDS * 12 + 2];
+    int n = 0;
+    out[0] = '-';
+    out[1] = 0;
+    for (int i = 0; i < g->platform_count; i++)
+        n += snprintf(out + n, sizeof out - (size_t)n, "%s%d,%d", i ? "," : "",
+                      g->lv.solids[i].x, g->lv.solids[i].y);
+    return out;
+}
+
 /* Index of the moving platform a body stands on, or -1 (trace). */
 static int riding(const Game *g, const Body *b)
 {
@@ -162,12 +176,12 @@ static int run_headless(const char *path, int check, int update, long max_frames
     for (size_t i = 0; i < n; i++) {
         game_tick(&g, r.frames[i].in);
         if (trace)
-            for (int t = 0; t < TEAM_COUNT; t++) {
+            for (int t = 0; t < g.player_count; t++) {
                 const Player *p = &g.players[t];
                 printf("%lu P%d x %d y %d vx %.3f vy %.3f st %d gnd %d hp %d atk %d dead %d "
                        "flag %d wins %d winner %d fruit %d spot %d water %d caught %d "
                        "title %d paused %d menu %d wfx %d wfy %d rx %ld cd %d wind %.4f wdir %d calm %u dfx %d "
-                       "ride %d ply %d\n",
+                       "ride %d pl %s\n",
                        (unsigned long)g.frame, t + 1, p->body.x, p->body.y, p->body.vx / 65536.0,
                        p->body.vy / 65536.0, p->state, p->grounded, p->health, p->attack_timer,
                        p->dead, g.carrying[t], g.wins[t], g.winner, g.fruit_active,
@@ -176,27 +190,33 @@ static int run_headless(const char *path, int check, int update, long max_frames
                        (long)p->body.rem_x, g.countdown, p->push_x / 65536.0,
                        g.wind_count ? g.winds[0].dir : 0,
                        (unsigned)game_wind_calm(&g), dropped_flag_x(&g), riding(&g, &p->body),
-                       g.platform_count ? g.lv.solids[0].y : -1);
+                       platform_list(&g));
             }
     }
     uint32_t hash = game_hash(&g);
-    printf("%s: frames=%lu hash=%08lx kos=%d,%d", path, (unsigned long)n, (unsigned long)hash,
-           g.kos[0], g.kos[1]);
-    int ok = 1;
+    printf("%s: frames=%lu hash=%08lx kos=", path, (unsigned long)n, (unsigned long)hash);
+    int ok = 1, kos_ok = 1;
+    for (int t = 0; t < r.players; t++) {
+        printf("%s%d", t ? "," : "", g.kos[t]);
+        kos_ok &= r.kos[t] == g.kos[t];
+    }
     if (r.has_hash && r.hash != hash) {
         printf(" (expected hash %08lx)", (unsigned long)r.hash);
         ok = 0;
     }
-    if (r.has_kos && (r.kos[0] != g.kos[0] || r.kos[1] != g.kos[1])) {
-        printf(" (expected kos %d,%d)", r.kos[0], r.kos[1]);
+    if (r.has_kos && !kos_ok) {
+        printf(" (expected kos");
+        for (int t = 0; t < r.players; t++)
+            printf("%s%d", t ? "," : " ", r.kos[t]);
+        printf(")");
         ok = 0;
     }
     printf(" %s\n", (r.has_hash || r.has_kos) ? (ok ? "PASS" : "FAIL") : "");
     if (update) {
         r.has_hash = r.has_kos = 1;
         r.hash = hash;
-        r.kos[0] = g.kos[0];
-        r.kos[1] = g.kos[1];
+        for (int t = 0; t < MAX_PLAYERS; t++)
+            r.kos[t] = g.kos[t];
         if (replay_save(&r, path))
             return 2;
         printf("updated %s\n", path);
@@ -312,7 +332,7 @@ static void render_debug_text(const Game *g)
     static const char *states[] = {"NORMAL", "DASH", "CLIMB", "HURT"};
     char l[80], f1[16], f2[16];
     int y = 24;
-    for (int t = 0; t < TEAM_COUNT; t++) {
+    for (int t = 0; t < g->player_count; t++) {
         const Player *p = &g->players[t];
         const Body *b = &p->body;
         snprintf(l, sizeof l, "P%d x %d y %d vx %s vy %s", t + 1, b->x, b->y, fxs(f1, b->vx),
@@ -369,7 +389,7 @@ static int write_tuning_header(const PlayerTuning *t)
 
 /* ---- input ------------------------------------------------------------- */
 
-static SDL_Gamepad *pads[TEAM_COUNT];
+static SDL_Gamepad *pads[MAX_PLAYERS];
 
 static void read_pad(SDL_Gamepad *pad, InputState *in)
 {
@@ -409,12 +429,12 @@ static const uint16_t KEY_BITS[7] = {
     BTN_LEFT, BTN_RIGHT, BTN_UP, BTN_DOWN, BTN_JUMP, BTN_ATTACK, BTN_DASH,
 };
 
-static void poll_input(InputState in[TEAM_COUNT])
+static void poll_input(InputState in[MAX_PLAYERS])
 {
     const bool *k = SDL_GetKeyboardState(NULL);
-    for (int t = 0; t < TEAM_COUNT; t++) {
-        in[t] = (InputState){BTN_CONNECTED, 0, 0};
-        for (int i = 0; i < 7; i++)
+    for (int t = 0; t < MAX_PLAYERS; t++) {
+        in[t] = (InputState){t < TEAM_COUNT ? BTN_CONNECTED : 0, 0, 0};
+        for (int i = 0; i < 7 && t < TEAM_COUNT; i++)
             if (k[KEYS[t][i]])
                 in[t].buttons |= KEY_BITS[i];
         if (pads[t])
@@ -556,13 +576,13 @@ int main(int argc, char **argv)
             if (ev.type == SDL_EVENT_QUIT) {
                 running = 0;
             } else if (ev.type == SDL_EVENT_GAMEPAD_ADDED) {
-                for (int i = 0; i < TEAM_COUNT; i++)
+                for (int i = 0; i < MAX_PLAYERS; i++)
                     if (!pads[i]) {
                         pads[i] = SDL_OpenGamepad(ev.gdevice.which);
                         break;
                     }
             } else if (ev.type == SDL_EVENT_GAMEPAD_REMOVED) {
-                for (int i = 0; i < TEAM_COUNT; i++)
+                for (int i = 0; i < MAX_PLAYERS; i++)
                     if (pads[i] && SDL_GetGamepadID(pads[i]) == ev.gdevice.which) {
                         SDL_CloseGamepad(pads[i]);
                         pads[i] = NULL;
@@ -622,12 +642,12 @@ int main(int argc, char **argv)
             if (frozen && !step)
                 continue;
             step = 0;
-            InputState in[TEAM_COUNT];
+            InputState in[MAX_PLAYERS];
             poll_input(in);
             if (playing) {
                 if (playback_pos < playback.count) {
-                    in[0] = playback.frames[playback_pos].in[0];
-                    in[1] = playback.frames[playback_pos].in[1];
+                    for (int t = 0; t < MAX_PLAYERS; t++)
+                        in[t] = playback.frames[playback_pos].in[t];
                     playback_pos++;
                 } else {
                     playing = 0;
@@ -636,7 +656,7 @@ int main(int argc, char **argv)
                 }
             }
             if (record_path)
-                replay_push(&rec, &in[0], &in[1]);
+                replay_push(&rec, in);
             game_tick(&g, in);
             if (g.stage_count > 1 && strcmp(level_names[g.stage], level_name)) {
                 snprintf(cur_level, sizeof cur_level, "%s", level_names[g.stage]);
@@ -695,8 +715,9 @@ int main(int argc, char **argv)
     if (record_path) {
         rec.has_hash = rec.has_kos = 1;
         rec.hash = game_hash(&g);
-        rec.kos[0] = g.kos[0];
-        rec.kos[1] = g.kos[1];
+        rec.players = g.player_count;
+        for (int t = 0; t < MAX_PLAYERS; t++)
+            rec.kos[t] = g.kos[t];
         if (replay_save(&rec, record_path) == 0)
             printf("wrote %s (%lu frames, hash %08lx)\n", record_path,
                    (unsigned long)rec.count, (unsigned long)rec.hash);

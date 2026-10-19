@@ -10,17 +10,18 @@ state holds, using the deterministic headless host (--trace).
     b.save("tests/replays/example.rpl")                 # then `make replay-update`
 
 Inputs are replay lines without the frame count (platform/common/replay.h):
-P1 buttons, then optionally " / " and P2 buttons. State per frame (from
-ctf --trace): frame, p[0] and p[1] with x, y, vx, vy, st (PS_*), grounded,
+P1 buttons, then optionally " / " and P2 buttons (and P3, P4; missing ones
+idle). State per frame (from ctf --trace): frame, p[0], p[1] (and p[2],
+p[3] in a game of more players) with x, y, vx, vy, st (PS_*), grounded,
 hp, atk (attack_timer), dead, flag (index carried or -1), wins, winner
 (0, or team + 1 during the round-end banner), fruit (0/1), spot (fruit
 spot index), water (stream length, 0 = none), caught (in the water),
-title (title screen), paused, menu (pause menu cursor), wfx/wfy (water
+title (1 title screen, 2 setup screen), paused, menu (pause menu cursor), wfx/wfy (water
 front cell, -1 without water), rx (sub-pixel x remainder, Q16.16), cd
 (countdown), wind (push, px/frame), wdir (gust direction), calm (frames
 to the next gust), dfx (x of a dropped flag, -1 none), ride (index of the
-moving platform the player stands on, -1 none), ply (y of moving platform
-0, -1 none).
+moving platform the player stands on, -1 none), pl (each moving
+platform's (x, y), in Game.platforms order).
 Conditions are checked on the state after
 each frame of the new run.
 """
@@ -35,7 +36,7 @@ LINE = re.compile(r"^(\d+) P(\d) x (-?\d+) y (-?\d+) vx (\S+) vy (\S+) st (\d+) 
                   r"hp (\d+) atk (\d+) dead (\d+) flag (-?\d+) wins (\d+) winner (\d+) "
                   r"fruit (\d+) spot (\d+) water (\d+) caught (\d+) "
                   r"title (\d+) paused (\d+) menu (\d+) wfx (-?\d+) wfy (-?\d+) rx (-?\d+) cd (\d+) "
-                  r"wind (\S+) wdir (-?\d+) calm (\d+) dfx (-?\d+) ride (-?\d+) ply (-?\d+)")
+                  r"wind (\S+) wdir (-?\d+) calm (\d+) dfx (-?\d+) ride (-?\d+) pl (\S+)")
 
 
 class PlayerState:
@@ -47,7 +48,7 @@ class PlayerState:
         self.flag, self.wins, self.winner = int(g[11]), int(g[12]), int(g[13])
         self.fruit, self.spot, self.water, self.caught = (int(g[14]), int(g[15]), int(g[16]),
                                                           int(g[17]) == 1)
-        self.title, self.paused, self.menu = int(g[18]) == 1, int(g[19]), int(g[20])
+        self.title, self.paused, self.menu = int(g[18]), int(g[19]), int(g[20])  # title: 1 title, 2 setup
         self.wfx, self.wfy = int(g[21]), int(g[22])
         self.rx = int(g[23])            # body.rem_x, Q16.16 sub-pixel position
         self.cd = int(g[24])            # round countdown frames left
@@ -56,7 +57,8 @@ class PlayerState:
         self.calm = int(g[27])          # frames until any zone's next gust (0 blowing, 65535 none)
         self.dfx = int(g[28])           # x of the first dropped flag, -1 none
         self.ride = int(g[29])          # Game.platforms index stood on, -1 none
-        self.ply = int(g[30])           # y of platform 0, -1 none
+        v = [] if g[30] == "-" else [int(n) for n in g[30].split(",")]
+        self.pl = list(zip(v[::2], v[1::2]))    # moving platforms' top-left (x, y)
 
     def __repr__(self):
         return (f"x {self.x} y {self.y} vx {self.vx} vy {self.vy} st {self.st} "
@@ -65,16 +67,16 @@ class PlayerState:
                 f"spot {self.spot} water {self.water} caught {int(self.caught)} "
                 f"title {int(self.title)} paused {self.paused} menu {self.menu} cd {self.cd} "
                 f"wind {self.wind} wdir {self.wdir} calm {self.calm} dfx {self.dfx} "
-                f"ride {self.ride} ply {self.ply}")
+                f"ride {self.ride} pl {self.pl}")
 
 
 class State:
     def __init__(self, frame):
         self.frame = frame
-        self.p = [None, None]
+        self.p = [None] * 4
 
     def __repr__(self):
-        return f"f{self.frame} P1 {self.p[0]} | P2 {self.p[1]}"
+        return f"f{self.frame} " + " | ".join(f"P{i + 1} {p}" for i, p in enumerate(self.p) if p)
 
 
 class Builder:

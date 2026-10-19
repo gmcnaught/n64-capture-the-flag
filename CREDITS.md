@@ -6,9 +6,9 @@
   <https://arks.itch.io/dino-characters>. CC BY 4.0. Player characters.
 - **Tiny Adventures Platformer Forest** by Willian Mstach,
   <https://willianmstach.itch.io/tiny-adventure-forest>. Free for use in games.
-  Ground tiles and one-way platforms of the Arena stage.
+  Ground tiles and one-way platforms of the Arena and Sky stages.
 - **Rocky Roads** by essssam, <https://essssam.itch.io/rocky-roads>. CC0.
-  Objects, clouds and trees; ground tiles of the Forest, Desert, Snow and
+  Objects (the Sky stage's cloud platforms among them), clouds and trees; ground tiles of the Forest, Desert, Snow and
   Lava stages (`tools/terrain.py`).
 - **Parallax (Forest, desert, sky, moon)** by Bongseng,
   <https://bongseng.itch.io/parallax-forest-desert-sky-moon>. Free to use in
