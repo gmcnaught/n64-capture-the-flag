@@ -20419,14 +20419,14 @@
 								{
 									"__identifier": "Force",
 									"__type": "Float",
-									"__value": -1.0,
+									"__value": -1.5,
 									"__tile": null,
 									"defUid": 58,
 									"realEditorValues": [
 										{
 											"id": "V_Float",
 											"params": [
-												-1.0
+												-1.5
 											]
 										}
 									]
@@ -20535,14 +20535,14 @@
 								{
 									"__identifier": "Force",
 									"__type": "Float",
-									"__value": 1.0,
+									"__value": 1.5,
 									"__tile": null,
 									"defUid": 58,
 									"realEditorValues": [
 										{
 											"id": "V_Float",
 											"params": [
-												1.0
+												1.5
 											]
 										}
 									]
