@@ -53,6 +53,17 @@ FS_FILES := $(addprefix $(FS_DIR)/,$(addsuffix .sprite,$(SPRITES))) \
             $(addprefix $(FS_DIR)/,$(notdir $(LEVEL_FILES) $(REPLAY_FILES))) \
             $(FS_DIR)/replays.txt
 
+# Replay-test ROM only (test, below): the replays it runs.
+ifdef CHECK_LIST
+FS_FILES += $(FS_DIR)/check.txt
+# Rewritten only when the list changes, so an unchanged pick does not repack the ROM.
+$(FS_DIR)/check.txt: FORCE
+	@mkdir -p $(dir $@)
+	@printf '%s\n' $(CHECK_REPLAYS) > $@.new
+	@cmp -s $@.new $@ && rm $@.new || mv $@.new $@
+endif
+FORCE:
+
 $(FS_DIR)/%.sprite: $(ASSETS_DIR)/n64/%.png
 	@mkdir -p $(dir $@)
 	@echo "    [SPRITE] $@"
@@ -89,13 +100,17 @@ $(BUILD_DIR)/$(ROMNAME).dfs: $(FS_FILES)
 $(ROMNAME).z64: N64_ROM_TITLE = "N64 Capture Flag"
 $(ROMNAME).z64: $(BUILD_DIR)/$(ROMNAME).dfs
 
-# Replay-test ROM: runs every replay at boot (see src/main.c).
+# Replay-test ROM: runs the replays named in CHECK_REPLAYS (file names in
+# tests/replays; default all) at boot, listed in rom:/check.txt (src/main.c).
+CHECK_REPLAYS ?= $(notdir $(REPLAY_FILES))
 test:
-	$(MAKE) ROMNAME=ctf-test BUILD_DIR=build-test EXTRA_CFLAGS=-DAUTOTEST
+	$(MAKE) ROMNAME=ctf-test BUILD_DIR=build-test EXTRA_CFLAGS=-DAUTOTEST CHECK_LIST=1 \
+	  CHECK_REPLAYS="$(CHECK_REPLAYS)"
+
 
 clean:
 	$(RM) -r $(BUILD_DIR) build-test $(FS_DIR) *.z64
-.PHONY: clean test
+.PHONY: clean test FORCE
 
 ifneq ($(wildcard $(BUILD_DIR)),)
   -include $(shell find $(BUILD_DIR) -name '*.d')

@@ -9,7 +9,9 @@
 #                   assets/src/levels/arena.ldtk from tools/make_arena.py only if missing
 #   make test       host self-test + every replay in tests/replays (golden hashes)
 #   make replay-update  rewrite the expected hash/kos in every replay
-#   make check      host self-test + N64 self-test + N64 replay test, read from ares (headless)
+#   make check      host self-test + N64 self-test + N64 replay test of the replays the
+#                   changes call for (tools/check_select.py), read from ares (headless);
+#                   FULL=1 or `make check-full`: every replay; ONLY="a b": those
 #   make deploy     copy the N64 ROM + replay-test ROM to each MiSTer in MISTER_HOSTS (checksum-verified)
 #
 # N64_INST defaults to ~/opt/libdragon (libdragon, preview branch).
@@ -29,6 +31,8 @@ selftest: host
 
 SELFTEST_EXPECTED := $(shell sed -n 's/.*CORE_SELFTEST_EXPECTED 0x\([0-9a-f]*\)u.*/\1/p' core/selftest.h)
 
+CHECK_PICK = $(VENV_PY) tools/check_select.py $(if $(FULL),--full) $(if $(ONLY),--only "$(ONLY)")
+
 check: host n64
 	$(MAKE) -C platform/host selftest
 	python3 tools/ares_read.py platform/n64/ctf.z64 \
@@ -36,9 +40,9 @@ check: host n64
 	  | tee build-check.log
 	grep -q "g_selftest_hash=0x$(SELFTEST_EXPECTED)" build-check.log
 	grep -q "g_selftest_done=0x600df00d" build-check.log
-	$(MAKE) -C platform/n64 test
-	python3 tools/ares_read.py --seconds 900 platform/n64/ctf-test.z64 \
-	  platform/n64/build-test/ctf-test.elf g_autotest_done g_replays_run \
+	@pick=$$($(CHECK_PICK)) && $(MAKE) -C platform/n64 test CHECK_REPLAYS="$$pick"
+	python3 tools/ares_read.py --seconds 1200 --until g_autotest_done=0x600df00d \
+	  platform/n64/ctf-test.z64 platform/n64/build-test/ctf-test.elf g_autotest_done g_replays_run \
 	  g_replays_passed g_frame_us_max g_busy_us_max g_busy_at g_repeats | tee build-check.log
 	grep -q "g_autotest_done=0x600df00d" build-check.log
 	@run=$$(sed -n 's/g_replays_run=//p' build-check.log); \
@@ -46,6 +50,9 @@ check: host n64
 	 test "$$run" = "$$passed" && test "$$run" != "0x00000000" || { echo "N64 replays: $$passed of $$run passed"; exit 1; }
 	@rm -f build-check.log
 	@echo "check: host and N64 self-test PASS ($(SELFTEST_EXPECTED)); N64 replays match host"
+
+check-full:
+	$(MAKE) check FULL=1
 
 # Python tools run in a project venv (Pillow).
 PYTHON ?= python3.14
@@ -111,4 +118,4 @@ clean:
 	$(MAKE) -C platform/host clean
 	$(MAKE) -C platform/n64 clean
 
-.PHONY: all host n64 selftest check assets arena run test replay-update deploy clean
+.PHONY: all host n64 selftest check check-full assets arena run test replay-update deploy clean

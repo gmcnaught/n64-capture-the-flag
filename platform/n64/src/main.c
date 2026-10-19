@@ -21,9 +21,11 @@
  *
  * Textures are RGBA16 (RGBA5551).
  *
- * Replay test: built with -DAUTOTEST (make -C platform/n64 test), or with
- * Start held at boot, plays every replay in rom:/replays.txt with rendering
- * and sound on and compares the final game_hash/kos with the host-recorded values.
+ * Replay test: built with -DAUTOTEST (make -C platform/n64 test), plays the
+ * replays in rom:/check.txt (the ones `make check` picked); with Start held
+ * at boot, every replay in rom:/replays.txt. Each runs with rendering and
+ * sound on and its final game_hash/kos are compared with the host-recorded
+ * values.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -391,12 +393,13 @@ static void count_repeats(void *arg)
 
 /* ---- replay test ------------------------------------------------------------ */
 
-#define MAX_REPLAYS 24
+#define MAX_REPLAYS 32
+#define RESULT_ROWS 16              /* results screen: then a second column */
 
-static void autotest(void)
+static void autotest(const char *list)
 {
     static char names[MAX_REPLAYS][64], results[MAX_REPLAYS][64];
-    int count = read_list("rom:/replays.txt", names, MAX_REPLAYS);
+    int count = read_list(list, names, MAX_REPLAYS);
 
     for (int i = 0; i < count; i++) {
         char path[80], status[80];
@@ -441,11 +444,12 @@ static void autotest(void)
         rmode = RMODE_NONE;
         text(16, 4, "REPLAY TEST %lu/%lu PASS", (unsigned long)g_replays_passed,
              (unsigned long)g_replays_run);
+        int rows = count < RESULT_ROWS ? count : RESULT_ROWS;
         for (int i = 0; i < count; i++)
-            text(16, 16 + i * 10, "%s", results[i]);
-        text(16, 26 + count * 10, "worst frame %lu us", (unsigned long)g_frame_us_max);
-        text(16, 36 + count * 10, "worst CPU+RDP %lu us", (unsigned long)g_busy_us_max);
-        text(16, 46 + count * 10, "repeated frames %lu", (unsigned long)g_repeats);
+            text(16 + i / RESULT_ROWS * 312, 16 + i % RESULT_ROWS * 10, "%s", results[i]);
+        text(16, 26 + rows * 10, "worst frame %lu us", (unsigned long)g_frame_us_max);
+        text(16, 36 + rows * 10, "worst CPU+RDP %lu us", (unsigned long)g_busy_us_max);
+        text(16, 46 + rows * 10, "repeated frames %lu", (unsigned long)g_repeats);
         rdpq_detach_show();
     }
 }
@@ -572,10 +576,10 @@ int main(void)
     sound_open(NULL);
     joypad_poll();
 #ifdef AUTOTEST
-    autotest();
+    autotest("rom:/check.txt");
 #endif
     if (joypad_get_buttons_held(JOYPAD_PORT_1).start)
-        autotest();
+        autotest("rom:/replays.txt");
 
     load_level(0);
     game_init(&game, &level, NULL, ABIL_ALL);

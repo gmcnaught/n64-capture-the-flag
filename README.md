@@ -72,7 +72,8 @@ macOS), Python 3, and ares for the N64 tests.
 make run          # build and play the PC version
 make n64          # build the N64 ROM: platform/n64/ctf.z64
 make test         # PC self-test and replay tests
-make check        # the same tests on the N64, in ares
+make check        # the same tests on the N64, in ares: the replays the changes call for
+make check-full   # every replay on the N64 (make check ONLY="menu duel": just those)
 make deploy MISTER_HOSTS=<ip>   # copy the ROM to a MiSTer
 ```
 
