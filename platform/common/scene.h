@@ -13,7 +13,7 @@
 #include "game.h"
 
 /* Sprite sheets, loaded by the platform by name (build/assets/{host,n64}). */
-enum { SPR_TILES, SPR_P1, SPR_P2, SPR_PAD, SPR_FLAG, SPR_BACKDROP, SPR_MOUNTAINS, SPR_HUD, SPR_FRUIT, SPR_FONT,
+enum { SPR_TILES, SPR_P1, SPR_P2, SPR_PAD, SPR_FLAG, SPR_SKY, SPR_SCENERY, SPR_HUD, SPR_FRUIT, SPR_FONT,
        SPR_SLASH, SPR_CONTROLS, SPR_COUNT };
 extern const char *const scene_sprite_names[SPR_COUNT];
 

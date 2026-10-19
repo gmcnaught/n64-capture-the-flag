@@ -22,9 +22,8 @@ Layouts below are in art px (before the stretch):
   flag      Rocky Roads flag halved (nearest): 9 frames of 16x16; row 0 red
             (team 1), row 1 recolored blue (team 2), row 2 (first cell) a
             dotted outline of frame 0 for empty goal stands
-  backdrop  Rocky Roads backgrounds, 256x128 rows: clouds, trees
-  mountains parallax-backgrounds Mountain layer, cropped to its peaks:
-            320x157, the whole screen width (no looping)
+  sky, scenery  the backdrop (tools/scenery.py), already at sim resolution
+            (640 wide, not stretched)
   hud       Rocky Roads hearts halved (nearest): full, 3/4, 1/2, empty, 8x8
   fruit     Rocky Roads apple halved (nearest) and recolored blue: the water
             fruit, 8x8
@@ -45,13 +44,11 @@ from PIL import Image
 import controls
 import effects
 import font
+import scenery
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROCKY = os.path.join(ROOT, "new-assets", "RockyRoads", "Rocky Roads")
 DINOS = os.path.join(ROOT, "new-assets", "sheets")
-MOUNTAINS = os.path.join(ROOT, "new-assets", "parallax-backgrounds", "Free", "Mountain",
-                         "2.Mountains.png")
-MOUNTAINS_TOP = 23                      # first row with pixels (above it: transparent)
 FRAME = 24
 # Source frame per animation row (core/player.h ANIM_*) of the 24-frame
 # DinoSprites strip: 0-3 idle, 4-9 move, 10-12 kick, 13-16 hurt (15 is a
@@ -139,10 +136,6 @@ def sheets():
     flag = load(os.path.join(ROCKY, "Objects", "flag.png"))
     flag = flag.resize((flag.width // 2, flag.height // 2), Image.NEAREST)
     yield "flag", stack([flag, recolor(flag, 0.6), dotted_outline(flag.crop((0, 0, 16, 16)))])
-    bg = os.path.join(ROCKY, "Backgrounds")
-    yield "backdrop", stack([load(os.path.join(bg, "clouds.png")), load(os.path.join(bg, "trees.png"))])
-    mountains = load(MOUNTAINS)
-    yield "mountains", mountains.crop((0, MOUNTAINS_TOP, mountains.width, mountains.height))
     apple = load(os.path.join(ROCKY, "Objects", "apple.png"))
     yield "fruit", recolor(apple.resize((8, 8), Image.NEAREST), 0.55)
     hearts = load(os.path.join(ROCKY, "UI", "hearts.png"))
@@ -158,8 +151,10 @@ def main():
     out = sys.argv[1]
     os.makedirs(os.path.join(out, "n64"), exist_ok=True)
     os.makedirs(os.path.join(out, "host"), exist_ok=True)
-    for name, im in sheets():
-        im = im.resize((im.width * 2, im.height), Image.NEAREST)
+    native = scenery.sheets()           # already 640 wide
+    for name, im in list(sheets()) + native:
+        if (name, im) not in native:
+            im = im.resize((im.width * 2, im.height), Image.NEAREST)
         if im.width > 1024:
             raise SystemExit(f"{name}: {im.width} px wide, RDP textures are at most 1024")
         im.save(os.path.join(out, "n64", name + ".png"))

@@ -6,7 +6,7 @@
 #include "font_glyphs.h"
 
 const char *const scene_sprite_names[SPR_COUNT] = {
-    "tiles", "p1", "p2", "jumppad", "flag", "backdrop", "mountains", "hud", "fruit", "font", "slash",
+    "tiles", "p1", "p2", "jumppad", "flag", "sky", "scenery", "hud", "fruit", "font", "slash",
     "controls",
 };
 
@@ -18,10 +18,8 @@ const char *const scene_sprite_names[SPR_COUNT] = {
 #define FLAG_FRAMES 9
 #define PAD_W 16                /* 4 frames of 16x16: rest, half, up, squashed */
 #define PAD_H 16
-#define BACKDROP_W 512          /* rows of 128: clouds, trees */
-#define BACKDROP_H 128
-#define MOUNTAINS_H 157         /* one screen-wide picture, 640 x 157 */
-#define MOUNTAINS_Y 46          /* peaks from y 46; the trees hide the foot */
+#define SKY_W 640               /* "sky" sheet (tools/scenery.py); the "scenery" sheet */
+#define SKY_H 144               /* is the whole screen, 640 x 240 */
 #define HEART_W 16              /* full, 3/4, 1/2, empty */
 #define HEART_H 8
 
@@ -43,28 +41,23 @@ static void outline(const DrawApi *d, int x, int y, int w, int h, uint32_t c)
 
 /* ---- backdrop ---------------------------------------------------------------- */
 
-/* A backdrop row looping horizontally, scrolled left by scroll px. */
-static void draw_strip(const DrawApi *d, int row, int y, int scroll)
-{
-    for (int x = -(scroll % BACKDROP_W); x < VIEW_W; x += BACKDROP_W)
-        d->blit(d->ctx, SPR_BACKDROP, 0, row * BACKDROP_H, BACKDROP_W, BACKDROP_H, x, y, 0);
-}
-
-/* Sky and the cloud bank, which drifts left 1 px every 4 frames (render
- * only: it reads the frame counter and never feeds back into the sim). */
+/* Sky: a screen-wide picture drifting left 1 px every 4 frames, every
+ * other copy mirrored so the edges always join (render only: it reads the
+ * frame counter and never feeds back into the sim). The scenery below
+ * covers the rest of the screen. */
 void scene_draw_sky(const Game *g, const DrawApi *d)
 {
-    static const uint32_t sky[4] = {0x5fb6e8ff, 0x74c2ecff, 0x8cceefff, 0xa6daf2ff};
-    for (int i = 0; i < 4; i++)
-        d->fill(d->ctx, 0, i * 16, VIEW_W, 16, sky[i]);
-    d->fill(d->ctx, 0, 64, VIEW_W, VIEW_H - 64, sky[3]);
-    draw_strip(d, 0, -10, (int)(g->frame / 4 % BACKDROP_W));   /* clouds: bank from y 35 down */
+    int s = (int)(g->frame / 4 % (2 * SKY_W));
+    for (int k = 0; k < 3; k++) {
+        int x = k * SKY_W - s;
+        if (x < VIEW_W && x + SKY_W > 0)
+            d->blit(d->ctx, SPR_SKY, 0, 0, SKY_W, SKY_H, x, 0, (k & 1) ? FLIP_X : 0);
+    }
 }
 
 static void draw_backdrop(const DrawApi *d)
 {
-    d->blit(d->ctx, SPR_MOUNTAINS, 0, 0, VIEW_W, MOUNTAINS_H, 0, MOUNTAINS_Y, 0);
-    draw_strip(d, 1, 112, 0);   /* trees: from y 157 to the bottom */
+    d->blit(d->ctx, SPR_SCENERY, 0, 0, VIEW_W, VIEW_H, 0, 0, 0);
 }
 
 static void draw_layers(const Game *g, const DrawApi *d)

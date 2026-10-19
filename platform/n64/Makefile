@@ -37,7 +37,7 @@ $(BUILD_DIR)/$(ROMNAME).elf: $(OBJS)
 # which the top-level `make assets` produces.
 ASSETS_DIR := ../../build/assets
 FS_DIR := filesystem
-SPRITES := tiles p1 p2 jumppad flag backdrop mountains hud fruit font slash controls
+SPRITES := tiles p1 p2 jumppad flag sky scenery hud fruit font slash controls
 MUSIC_DIR := ../../new-assets/music
 MODULES := $(basename $(notdir $(wildcard $(MUSIC_DIR)/*.xm)))
 # N64 music is modules only: rendered and synthesized music WAVs stay out.
@@ -56,7 +56,7 @@ $(FS_DIR)/%.sprite: $(ASSETS_DIR)/n64/%.png
 	$(N64_MKSPRITE) --format RGBA16 $(MKSPRITE_FLAGS) -o $(FS_DIR) "$<"
 
 # Textures default to RGBA16; large sheets are compressed at level 1.
-$(FS_DIR)/tiles.sprite $(FS_DIR)/backdrop.sprite $(FS_DIR)/mountains.sprite $(FS_DIR)/font.sprite: MKSPRITE_FLAGS = --compress 1
+$(FS_DIR)/tiles.sprite $(FS_DIR)/sky.sprite $(FS_DIR)/scenery.sprite $(FS_DIR)/font.sprite: MKSPRITE_FLAGS = --compress 1
 
 $(FS_DIR)/%.wav64: $(ASSETS_DIR)/audio/%.wav
 	@mkdir -p $(dir $@)

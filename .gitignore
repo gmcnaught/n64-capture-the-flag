@@ -20,3 +20,5 @@ new-assets/parallax-backgrounds/*
 new-assets/parallax-backgrounds/Free/*
 !new-assets/parallax-backgrounds/Free/Mountain/
 new-assets/parallax-backgrounds/Free/Mountain/*.gif
+# Bongseng parallax pack: free to use in games, files not redistributable.
+new-assets/more-parallax/
