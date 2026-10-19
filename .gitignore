@@ -14,3 +14,9 @@ new-assets/tinyHeroSprites/
 new-assets/music/always_together.xm
 # Design notes stay local.
 docs/
+# Background pack: only the Mountain set (used) is tracked.
+new-assets/parallax-backgrounds/*
+!new-assets/parallax-backgrounds/Free/
+new-assets/parallax-backgrounds/Free/*
+!new-assets/parallax-backgrounds/Free/Mountain/
+new-assets/parallax-backgrounds/Free/Mountain/*.gif

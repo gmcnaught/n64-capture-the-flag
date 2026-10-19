@@ -8,7 +8,11 @@
   <https://willianmstach.itch.io/tiny-adventure-forest>. Free for use in games.
   Ground tiles and one-way platforms.
 - **Rocky Roads** by essssam, <https://essssam.itch.io/rocky-roads>. CC0.
-  Objects and backdrop.
+  Objects, clouds and trees.
+- **Parallax Backgrounds (Demo)** by The Pixel Nook,
+  <https://the-pixel-nook.itch.io/parallax-backgrounds-demo>. CC BY 4.0
+  (<https://creativecommons.org/licenses/by/4.0/>). Mountain layer, cropped
+  to its peaks.
 
 ## Fonts
 

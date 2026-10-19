@@ -99,5 +99,6 @@ platform/n64/      libdragon build (rdpq, 640x240)
 tools/             asset pipeline (tileset, arena, LDtk import, sprites, audio, replays)
 assets/src/        arena.ldtk, arena.png (generated from new-assets/)
 new-assets/        source art packs (Tiny Adventure Platformer Forest tiles, Dino Characters,
-                   Rocky Roads objects/backdrop; Tiny Hero Sprites, unused, is local only)
+                   Rocky Roads objects/backdrop, The Pixel Nook mountains; Tiny Hero
+                   Sprites, unused, is local only; credits in CREDITS.md)
 ```

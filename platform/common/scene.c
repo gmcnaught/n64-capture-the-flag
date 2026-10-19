@@ -6,7 +6,7 @@
 #include "font_glyphs.h"
 
 const char *const scene_sprite_names[SPR_COUNT] = {
-    "tiles", "p1", "p2", "jumppad", "flag", "backdrop", "hud", "fruit", "font", "slash",
+    "tiles", "p1", "p2", "jumppad", "flag", "backdrop", "mountains", "hud", "fruit", "font", "slash",
     "controls",
 };
 
@@ -18,8 +18,10 @@ const char *const scene_sprite_names[SPR_COUNT] = {
 #define FLAG_FRAMES 9
 #define PAD_W 16                /* 4 frames of 16x16: rest, half, up, squashed */
 #define PAD_H 16
-#define BACKDROP_W 512          /* rows of 128: clouds, mountains, trees */
+#define BACKDROP_W 512          /* rows of 128: clouds, trees */
 #define BACKDROP_H 128
+#define MOUNTAINS_H 157         /* one screen-wide picture, 640 x 157 */
+#define MOUNTAINS_Y 46          /* peaks from y 46; the trees hide the foot */
 #define HEART_W 16              /* full, 3/4, 1/2, empty */
 #define HEART_H 8
 
@@ -61,8 +63,8 @@ void scene_draw_sky(const Game *g, const DrawApi *d)
 
 static void draw_backdrop(const DrawApi *d)
 {
-    draw_strip(d, 1, 50, 0);    /* mountains */
-    draw_strip(d, 2, 112, 0);   /* trees: from y 157 to the bottom */
+    d->blit(d->ctx, SPR_MOUNTAINS, 0, 0, VIEW_W, MOUNTAINS_H, 0, MOUNTAINS_Y, 0);
+    draw_strip(d, 1, 112, 0);   /* trees: from y 157 to the bottom */
 }
 
 static void draw_layers(const Game *g, const DrawApi *d)
