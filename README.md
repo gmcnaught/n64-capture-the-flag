@@ -3,6 +3,8 @@
 A fast, fun two-player capture-the-flag game for the Nintendo 64. Built
 with libdragon and SDL3, so the same game plays on the N64 and on PC.
 
+![Blue steals a red flag; red kicks the carrier and takes the flag home](screenshots/gameplay.gif)
+
 | | |
 |---|---|
 | ![Title screen](screenshots/title.png) | ![Red carries a blue flag home while blue swings](screenshots/gameplay.png) |

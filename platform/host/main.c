@@ -14,6 +14,7 @@
  *   --trace             with --headless: print both players every frame
  *   --frames N          quit after N frames
  *   --screenshot FILE   save the last frame as BMP on exit
+ *   --dump-frames DIR   save every frame as DIR/NNNNN.bmp (N = sim frame), for GIFs
  *   --mute              no audio
  *   --fullscreen        start fullscreen (F11 or Alt+Enter toggles)
  *
@@ -376,6 +377,8 @@ int main(int argc, char **argv)
 {
     long max_frames = -1;
     const char *level_arg = NULL, *record_path = NULL, *replay_path = NULL, *shot_path = NULL;
+    const char *dump_dir = NULL;
+    unsigned long dumped = (unsigned long)-1;
     int headless = 0, check = 0, update = 0, trace = 0, mute = 0, fullscreen = 0;
     uint32_t hash = core_selftest();
     int pass = hash == CORE_SELFTEST_EXPECTED;
@@ -409,11 +412,13 @@ int main(int argc, char **argv)
             trace = 1;
         } else if (!strcmp(a, "--screenshot") && i + 1 < argc) {
             shot_path = argv[++i];
+        } else if (!strcmp(a, "--dump-frames") && i + 1 < argc) {
+            dump_dir = argv[++i];
         } else {
             fprintf(stderr, "usage: %s [--selftest] [--assets DIR] [--level FILE] [--mute] "
                             "[--fullscreen] [--record FILE] "
                             "[--replay FILE [--headless [--check|--update] [--trace]]] "
-                            "[--frames N] [--screenshot FILE]\n", argv[0]);
+                            "[--frames N] [--screenshot FILE] [--dump-frames DIR]\n", argv[0]);
             return 2;
         }
     }
@@ -595,6 +600,15 @@ int main(int argc, char **argv)
                 fprintf(stderr, "screenshot: %s\n", SDL_GetError());
             SDL_DestroySurface(s);
             shot_path = NULL;
+        }
+        if (dump_dir && (unsigned long)frames != dumped) {
+            char path[512];
+            snprintf(path, sizeof path, "%s/%05lu.bmp", dump_dir, (unsigned long)frames);
+            SDL_Surface *s = SDL_RenderReadPixels(ren, NULL);
+            if (!s || !SDL_SaveBMP(s, path))
+                fprintf(stderr, "dump-frames: %s\n", SDL_GetError());
+            SDL_DestroySurface(s);
+            dumped = (unsigned long)frames;
         }
         SDL_RenderPresent(ren);
     }
