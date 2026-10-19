@@ -1,115 +1,97 @@
-# n64-capture-the-flag
+# Capture the Flag
 
-Two-player, one-room capture-the-flag game for the Nintendo 64 (libdragon),
-built on the n64-platformer framework: the same integer-only C99 core
-(movement, collision, replays) running on N64 and an SDL3 host build.
+A fast, fun two-player capture-the-flag game for the Nintendo 64. Built
+with libdragon and SDL3, so the same game plays on the N64 and on PC.
 
 | | |
 |---|---|
 | ![Title screen](screenshots/title.png) | ![Red carries a blue flag home while blue swings](screenshots/gameplay.png) |
 | ![Controls screen in the pause menu](screenshots/controls.png) | ![Round winner banner](screenshots/winner.png) |
 
-**Play it:** download `capture-the-flag.z64` from the
+## Play
+
+**N64:** download `capture-the-flag.z64` from the
 [latest release](https://github.com/gmcnaught/n64-capture-the-flag/releases/latest)
-and run it on the MiSTer N64 core or in the ares emulator (both tested;
-real hardware is untested). Two controllers.
+and run it on the MiSTer N64 core or in the ares emulator. Plug in two
+controllers.
 
-Status: playable capture the flag in a Joust-scale arena after the
-whiteboard sketch. Each team has 3 flags by its start; steal the other
-team's flags and carry them, one at a time, into your goal (the ledge with
-three flag stands at the top on your side); all 3 wins the round. Carriers run
-slower and cannot dash or attack; a hit carrier drops the flag where it stands and goes back
-to its start. Flags at home can only be taken by the other team; dropped
-flags (and flags in a goal) by either player; carry your own flag back to
-your start area to return it. Players without a flag lose a heart per hit
-and respawn after a knockout. Now and then a blue water fruit appears on
-the top slab; touching it releases a Bubble Bobble-style stream that runs
-down the platforms and carries anyone in it. Players are solid to each other: you can
-stand on the other player, who then runs slower and jumps lower, and
-landing on a jumping player stops their jump. Ladders still work in the core but the arena
-has none (the Dino art has no climb frames).
+**PC:** build it from source (below) and run `make run`. Two players share
+the keyboard, or plug in gamepads.
 
-The game boots to a title screen (Start or Jump begins a match). Every
-round opens with a 3, 2, 1, GO! countdown, players frozen until GO!. Start
-pauses into a menu: RESUME, CONTROLS (the N64 controller with each
-button's action, and tips), RESTART (new match) or QUIT TO TITLE. A round
-win shows "RED WINS!" / "BLUE WINS!" and the rounds score over the dimmed
-arena for 3 s. Players start facing away from the middle pillar. A dash
-leans the dino forward with speed lines and leaves flickering afterimages
-in the team color; an attack sweeps a slash in front (or above or below).
-Screen text uses a display font drawn in `tools/font.py` (chunky capitals,
-smoothed with Scale2x/Scale3x, outlined, tinted per use); small labels use
-Roundabout (FeatureKeep, CC0) in the same outline style.
+## How to play
 
-Music (tracker modules in `new-assets/music/`, played by libdragon xm64 on
-the N64 and by libxm, vendored in `platform/host/external/libxm`, on the
-host): title screen "Napping on a cloud" by congusbongus (OpenGameArt,
-CC0); in play "Which Brand Of Mustard Shall I Buy", also by congusbongus
-(OpenGameArt, CC0), selected by the arena's LDtk `Music` field (id 1).
+Red against blue in one arena. Each team keeps three flags by its start.
 
-## Screen and scale
+- **Steal** the other team's flags and carry them, one at a time, up to
+  your goal ledge. Get all three there to win the round.
+- **Carriers** run slower and can't dash or attack. Kick a carrier and they
+  drop the flag and go back to their start.
+- **Defend:** grab your own dropped flag and carry it home.
+- **Fight:** kick to knock off hearts; lose them all and you respawn.
+- **Stack:** stand on your opponent to weigh them down, or land on them to
+  stop their jump.
+- **Water fruit:** now and then a fruit appears up top. Touch it and a
+  stream of water pours down the platforms, sweeping up anyone in its way.
 
-The N64 runs at 640x240 progressive; sim coordinates are those pixels. A
-4:3 display shows 640x240 pixels half as wide as they are tall, so every
-square art pixel is drawn 2 sim px wide (sheets are pre-stretched by
-`tools/build_sprites.py`). One 8x8 art tile = one 16x8 cell; the arena is
-40x30 cells, the content of four 320x240 screens of 16x16 tiles. The HUD
-stays inside a 32x12 px action-safe margin and the arena has 2-cell side
-walls there, since TVs and scalers crop the edges (overscan). Characters
-are Dino Characters at native size (24x24 frames, 15x17 px bodies, about 7%
-of the screen height). The host shows the 640x240 view at 640x480. The N64
-draws the backdrop and tiles once per level into a buffer and copies it
-each frame.
-
-## Build
-
-Needs the libdragon toolchain at `$N64_INST` (default `~/opt/libdragon`, the
-same install as n64-platformer, libdragon `preview`), SDL3 (`brew install
-sdl3 pkg-config`), Python 3.14, and ares for `make check`.
-
-```sh
-make run          # build assets + host, play
-make n64          # platform/n64/ctf.z64
-make test         # host self-test + golden replays (tests/replays)
-make check        # host + N64 self-test and replays in ares (headless)
-make deploy       # copy ROMs to the MiSTers in MISTER_HOSTS
-make arena        # regenerate the tileset; arena.ldtk only if missing (it is edited in LDtk)
-```
-
-Levels are authored in LDtk (`assets/src/levels/arena.ldtk`, 8 px grid in
-art px; the importer doubles entity x). Replays are scripted with
-`tools/make_replays.py` on routes from `tools/routefind.c` (a search over
-jumps with the real movement code, built by `make host`), so after a level
-edit `make assets` and the script re-route everything, and `capture` /
-`capture_blue` fail if a team cannot win; then `make replay-update`
-records hashes.
+Every round starts with a 3, 2, 1, GO! countdown. Press Start to pause; the
+pause menu has a CONTROLS screen.
 
 ## Controls
 
-| Action | P1 keys | P2 keys | Gamepad / N64 |
-|---|---|---|---|
-| Move (down + jump: drop through a one-way ledge) | WASD | arrows | stick, D-pad |
-| Jump | Space | Right Shift | A (south) / A |
-| Attack (hold up/down: up/down attack) | F | / | X (west) / B |
-| Dash | Left Shift | . | B (east), RB / Z, R |
-| Start / pause (menu: up/down, jump or attack picks) | Enter | | Start |
+| Action | N64 | Gamepad | P1 keys | P2 keys |
+|---|---|---|---|---|
+| Move | Stick, D-pad | Stick, D-pad | WASD | Arrows |
+| Jump (again in the air: double jump; at a wall: wall jump) | A | A (south) | Space | Right Shift |
+| Attack (hold up or down to aim) | B | X (west) | F | / |
+| Dash | Z, R | B (east), RB | Left Shift | . |
+| Drop through a platform | Down + A | Down + A | S + Space | Down + Right Shift |
+| Pause / menu | Start | Start | Enter | |
 
-Host debug keys: Backspace restart, Tab next level, F1 overlay, F2 tuning
-panel (F5 writes `core/player_tuning.h`), P freeze, N step, F11 fullscreen.
-N64 debug (controller 1): L next level, C-down restart, C-up overlay; hold
-Start at boot for the replay test.
+## Build
 
-## Layout
+You need the libdragon toolchain (`preview` branch) at `$N64_INST`
+(default `~/opt/libdragon`), SDL3 (`brew install sdl3 pkg-config` on
+macOS), Python 3, and ares for the N64 tests.
+
+```sh
+make run          # build and play the PC version
+make n64          # build the N64 ROM: platform/n64/ctf.z64
+make test         # PC self-test and replay tests
+make check        # the same tests on the N64, in ares
+make deploy MISTER_HOSTS=<ip>   # copy the ROM to a MiSTer
+```
+
+The forest backdrop comes from Bongseng's
+[Parallax (Forest, desert, sky, moon)](https://bongseng.itch.io/parallax-forest-desert-sky-moon),
+whose files can't be redistributed. Download it and unpack it into
+`new-assets/more-parallax/` to build with it; without it the game uses a
+mountain backdrop that is included.
+
+The level is edited in [LDtk](https://ldtk.io) (`assets/src/levels/arena.ldtk`).
+
+## How it works
+
+One integer-only C99 core runs the game on both platforms: movement,
+collision, flags and rounds. The N64 build draws it with libdragon at
+640x240; the PC build draws the same frames with SDL3. Recorded replays
+must produce identical results on PC and N64, which `make test` and
+`make check` verify. Music is tracker modules, played by libdragon's xm64
+player on the N64 and by libxm on PC.
 
 ```
-core/              shared sim: body, player, level, game (2 players, PvP), selftest
-platform/common/   scene.c (shared renderer), replay.c, audio names
-platform/host/     SDL3 build
-platform/n64/      libdragon build (rdpq, 640x240)
-tools/             asset pipeline (tileset, arena, LDtk import, sprites, audio, replays)
-assets/src/        arena.ldtk, arena.png (generated from new-assets/)
-new-assets/        source art packs (Tiny Adventure Platformer Forest tiles, Dino Characters,
-                   Rocky Roads objects/backdrop, The Pixel Nook mountains; the Bongseng
-                   forest backdrop and Tiny Hero Sprites are local only; credits in
-                   CREDITS.md)
+core/              game logic shared by both platforms
+platform/common/   shared renderer, replays, audio names
+platform/host/     PC build (SDL3)
+platform/n64/      N64 build (libdragon)
+tools/             asset pipeline, level import, replay scripting
+assets/src/        level and tileset
+new-assets/        source art and music
+tests/replays/     replay tests
 ```
+
+Debug keys on PC: F1 collision overlay, F2 tuning panel, Backspace
+restart, P freeze, N step a frame, F11 fullscreen.
+
+## Credits
+
+Art, music and fonts by their creators; see [CREDITS.md](CREDITS.md).
