@@ -92,6 +92,7 @@ tests/replays/     replay tests
 Debug keys on PC: F1 collision overlay, F2 tuning panel, Backspace
 restart, P freeze, N step a frame, F11 fullscreen.
 
-## Credits
+## License
 
-Art, music and fonts by their creators; see [CREDITS.md](CREDITS.md).
+The code is under the [MIT License](LICENSE). Art, music and fonts are by
+their creators under their own licenses; see [CREDITS.md](CREDITS.md).
