@@ -1,0 +1,45 @@
+# stack P1 stands on the middle landing, P2 walks up to it from the
+level arena.lvl
+abilities 7
+tune fruit_min 0x0000ea60
+232 C / C
+3 LC / C
+15 LJC / C
+1 LC / C
+29 LJC / C
+6 C / C
+2 LC / C
+11 LJC / C
+1 LC / C
+20 LJC / C
+6 C / C
+21 RC / C
+33 RJC / C
+1 RC / C
+38 RJC / C
+7 C / C
+2 C / RC
+15 C / RJC
+1 C / RC
+30 C / RJC
+6 C / C
+2 C / LC
+11 C / LJC
+1 C / LC
+21 C / LJC
+5 C / C
+16 C / LC
+1 C / C
+12 C / LJC
+7 C / JC
+21 C / C
+20 JC / C
+9 C / C
+1 C / JC
+7 C / C
+12 JC / C
+1 C / C
+22 RC / C
+30 C / C
+hash e35b5a17
+kos 0 0

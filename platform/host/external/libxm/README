@@ -1,0 +1,3 @@
+libxm (Romain "Artefact2" Dalmaso, WTFPL, see COPYING): src/ of
+https://github.com/Artefact2/libxm at d8067bd (2025-12-24), unmodified.
+platform/host/Makefile configures xm.h and the XM_* options (instead of CMake).

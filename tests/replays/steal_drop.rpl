@@ -1,0 +1,32 @@
+# steal_drop P1 waits right of the red flags; P2 takes one;
+level arena.lvl
+abilities 7
+tune fruit_min 0x0000ea60
+232 C / C
+5 LC / C
+7 LJC / C
+1 LC / C
+35 LJC / C
+18 C / C
+2 C / RC
+15 C / RJC
+1 C / RC
+30 C / RJC
+6 C / C
+2 C / LC
+11 C / LJC
+1 C / LC
+21 C / LJC
+6 C / C
+73 C / LC
+7 C / LJC
+1 C / LC
+33 C / LJC
+7 C / C
+24 LC / C
+2 AC / C
+21 C / C
+6 LC / C
+31 C / C
+hash b4a665b1
+kos 0 0

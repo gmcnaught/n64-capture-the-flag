@@ -1,0 +1,36 @@
+# menu Held input moves nothing during the countdown. P1 walks
+level arena.lvl
+abilities 7
+tune fruit_min 0x0000ea60
+1 C / C
+60 LC / RC
+169 C / C
+30 LC / C
+1 SC / C
+20 LC / RC
+1 C / C
+1 DC / C
+1 C / C
+1 JC / C
+1 C / C
+20 DC / UC
+1 C / C
+1 C / AC
+1 C / C
+1 C / DC
+1 C / C
+1 DC / C
+1 C / UC
+1 JC / C
+230 C / C
+1 C / SC
+1 C / C
+1 C / UC
+1 C / AC
+20 LC / RC
+1 C / C
+1 C / JC
+220 C / C
+20 LC / RC
+hash e3be81bf
+kos 0 0

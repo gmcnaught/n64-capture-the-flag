@@ -1,0 +1,16 @@
+build/
+*.z64
+.DS_Store
+__pycache__/
+build-check.log
+.venv/
+platform/n64/filesystem/
+platform/n64/build-test/
+.remember/
+new-assets/**/__MACOSX/
+# Not redistributable: Craftpix license forbids sharing the art files;
+# Mod Archive Distribution license (no use in games). Keep local copies only.
+new-assets/tinyHeroSprites/
+new-assets/music/always_together.xm
+# Design notes stay local.
+docs/

@@ -1,0 +1,39 @@
+# water P2 waits on the top slab between the fruit spots and P1 on
+level arena.lvl
+abilities 7
+232 C / C
+2 C / RC
+15 C / RJC
+1 C / RC
+30 C / RJC
+6 C / C
+2 C / LC
+7 C / JC
+1 C / C
+23 C / JC
+1 C / C
+2 C / LC
+27 C / LJC
+1 C / LC
+26 C / LJC
+7 C / C
+3 LC / C
+15 LJC / C
+1 LC / C
+29 LJC / C
+6 C / C
+3 RC / C
+11 RJC / C
+1 RC / C
+21 RJC / C
+6 C / C
+9 RC / C
+23 RJC / C
+1 RC / C
+38 RJC / C
+1076 C / C
+1 C / RC
+16 C / LC
+151 C / C
+hash ae68ff53
+kos 0 0
