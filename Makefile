@@ -37,7 +37,7 @@ check: host n64
 	grep -q "g_selftest_hash=0x$(SELFTEST_EXPECTED)" build-check.log
 	grep -q "g_selftest_done=0x600df00d" build-check.log
 	$(MAKE) -C platform/n64 test
-	python3 tools/ares_read.py --seconds 180 platform/n64/ctf-test.z64 \
+	python3 tools/ares_read.py --seconds 360 platform/n64/ctf-test.z64 \
 	  platform/n64/build-test/ctf-test.elf g_autotest_done g_replays_run \
 	  g_replays_passed g_frame_us_max g_busy_us_max g_busy_at g_repeats | tee build-check.log
 	grep -q "g_autotest_done=0x600df00d" build-check.log

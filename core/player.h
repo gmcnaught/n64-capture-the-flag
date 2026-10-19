@@ -28,6 +28,7 @@ typedef struct {
     int32_t weight_speed;       /* run_speed while the other player stands on you */
     int32_t weight_jump;        /* jump and double jump speed while stood on */
     int32_t fruit_min, fruit_range; /* frames until the next water fruit: min + rnd % range */
+    int32_t ice_accel, ice_decel;   /* run_accel, run_decel standing on SURFACE_ICE */
 } PlayerTuning;
 
 typedef struct {
@@ -38,6 +39,9 @@ typedef struct {
 
 extern const TuningField tuning_fields[];
 extern const int tuning_field_count;
+/* The last ICE_TUNING_FIELDS entries of tuning_fields are the ice ones
+ * (game_hash mixes them only on levels with ice). */
+#define ICE_TUNING_FIELDS 2
 void tuning_defaults(PlayerTuning *t);
 
 enum { PS_NORMAL, PS_DASH, PS_CLIMB, PS_HURT };

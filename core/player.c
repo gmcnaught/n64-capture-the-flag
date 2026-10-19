@@ -20,6 +20,7 @@ const TuningField tuning_fields[] = {
     FIELD(shield_recharge, 0),
     FIELD(carry_speed, 1), FIELD(weight_speed, 1), FIELD(weight_jump, 1),
     FIELD(fruit_min, 0), FIELD(fruit_range, 0),
+    FIELD(ice_accel, 1), FIELD(ice_decel, 1),
 };
 const int tuning_field_count = (int)(sizeof tuning_fields / sizeof tuning_fields[0]);
 
@@ -39,6 +40,14 @@ static fx approach(fx v, fx target, fx step)
 static fx fx_abs(fx v) { return v < 0 ? -v : v; }
 
 static int center_cell_x(const Body *b) { return (b->x + b->w / 2) >> TILE_SHIFT_X; }
+
+/* Either foot on an ice cell. */
+static int on_ice(const Body *b, const Level *lv)
+{
+    int cy = (b->y + b->h) >> TILE_SHIFT_Y;
+    return level_surface(lv, b->x >> TILE_SHIFT_X, cy) == SURFACE_ICE ||
+           level_surface(lv, (b->x + b->w - 1) >> TILE_SHIFT_X, cy) == SURFACE_ICE;
+}
 
 static int overlaps_ladder(const Body *b, const Level *lv)
 {
@@ -476,8 +485,9 @@ void player_tick(Player *p, const Level *lv, const PlayerTuning *t,
     } else if (!p->knock) {
         int speeding_up = target != 0 && (b->vx == 0 || (b->vx > 0) == (target > 0)) &&
                           fx_abs(b->vx) <= fx_abs(target);
-        fx a = p->grounded ? (speeding_up ? t->run_accel : t->run_decel)
-                           : (speeding_up ? t->air_accel : t->air_decel);
+        fx a = !p->grounded  ? (speeding_up ? t->air_accel : t->air_decel)
+               : on_ice(b, lv) ? (speeding_up ? t->ice_accel : t->ice_decel)
+                               : (speeding_up ? t->run_accel : t->run_decel);
         b->vx = approach(b->vx, target, a);
         if (dir)
             p->facing = (int8_t)dir;

@@ -60,11 +60,12 @@ static void outline(const DrawApi *d, int x, int y, int w, int h, uint32_t c)
 /* ---- backdrop ---------------------------------------------------------------- */
 
 /* Sky: a screen-wide picture that tiles horizontally, drifting left 1 px
- * every 4 frames (render only: it reads the frame counter and never feeds
- * back into the sim). The scenery below covers the rest of the screen. */
+ * every 4 frames, stopped while paused (render only: it reads Game.anim
+ * and never feeds back into the sim). The scenery below covers the rest
+ * of the screen. */
 void scene_draw_sky(const Game *g, const DrawApi *d)
 {
-    int s = (int)(g->frame / 4 % SKY_W), h = backdrop_sky_h[g->backdrop];
+    int s = (int)(g->anim / 4 % SKY_W), h = backdrop_sky_h[g->backdrop];
     for (int x = -s; x < VIEW_W; x += SKY_W)
         d->blit(d->ctx, SPR_SKY, 0, 0, SKY_W, h, x, 0, 0);
 }
@@ -112,7 +113,7 @@ static void draw_goals(const Game *g, const DrawApi *d)
 static void draw_flag(const Game *g, const DrawApi *d, int i)
 {
     const Flag *f = &g->flags[i];
-    int frame = (int)((g->frame / 6 + (uint32_t)i * 3) % FLAG_FRAMES);
+    int frame = (int)((g->anim / 6 + (uint32_t)i * 3) % FLAG_FRAMES);
     int flip = f->state == FS_CARRIED && g->players[f->holder].facing < 0 ? FLIP_X : 0;
     int x = f->body.x + FLAG_W / 2 - FLAG_SPR_W / 2, y = f->body.y;
     if (f->state == FS_CARRIED) {
@@ -160,8 +161,8 @@ static void draw_water(const Game *g, const DrawApi *d)
 {
     if (g->fruit_active) {
         int x = g->fruit_spot_x[g->fruit_spot], y = g->fruit_spot_y[g->fruit_spot];
-        int bob = (g->frame >> 4) & 1;
-        if (g->fruit_timer > 120 || (g->frame & 4))     /* blink before it goes */
+        int bob = (g->anim >> 4) & 1;
+        if (g->fruit_timer > 120 || (g->anim & 4))     /* blink before it goes */
             d->blit(d->ctx, SPR_FRUIT, 0, 0, TILE_W, TILE_H, x, y - bob, 0);
     }
     for (int i = g->water_len - 1; i >= 0; i--) {
@@ -199,10 +200,10 @@ static void draw_player(const Game *g, const DrawApi *d, int t, int spr)
         /* Afterimages in the team color, fading, along the dash so far
          * (one per two frames, so none where the dash has not been). Each
          * shows every other frame, alternating, so they read as see-through
-         * (render only: reads the frame counter). */
+         * (render only: reads Game.anim). */
         int age = g->tuning.dash_frames - p->dash_timer;
         for (int k = DASH_GHOSTS; k >= 1; k--)
-            if (age >= 2 * k && ((g->frame + (uint32_t)k) & 1))
+            if (age >= 2 * k && ((g->anim + (uint32_t)k) & 1))
                 d->blit_tint(d->ctx, spr, sx, sy, PLAYER_SPRITE_W, PLAYER_SPRITE_H,
                              x - p->dash_dir * k * DASH_GHOST_STEP, y, flip, GHOST_TINT[t][k - 1]);
     }

@@ -7,7 +7,10 @@
  * copies the buffer over them (copy mode skips its transparent texels).
  * Only the current backdrop's sky and scenery sheets and the level's
  * tileset sheet are in memory: a backdrop or stage change on the title
- * screen reloads them and rebuilds the buffer.
+ * screen reloads them and rebuilds the buffer. The CONTROLS screen (its
+ * text alone takes about a frame of CPU) is drawn once into a second
+ * buffer when it opens and copied while it stays: nothing under it moves
+ * while paused (Game.anim).
  *
  * Controllers 1 and 2: stick/D-pad move, A jump, Z or R dash, B attack,
  * Start start / pause (menu: up/down, A picks). Boots to the title screen
@@ -264,6 +267,30 @@ static void load_level_sheets(void)
     background_level = -1;
 }
 
+static bool selftest_pass, debug;
+
+static surface_t controls_frame;
+static bool controls_cached;            /* controls_frame holds the CONTROLS screen */
+
+static void draw_frame(void)
+{
+    rmode = RMODE_NONE;
+    scene_draw_sky(&game, &draw_api);
+    use_mode(RMODE_COPY);
+    rdpq_tex_blit(&background, 0, 0, NULL);
+    scene_draw(&game, &draw_api, debug);
+}
+
+static void cache_controls(void)
+{
+    if (!controls_frame.buffer)
+        controls_frame = surface_alloc(FMT_RGBA16, VIEW_W, VIEW_H);
+    rdpq_attach(&controls_frame, NULL);
+    draw_frame();
+    rdpq_detach_wait();
+    controls_cached = true;
+}
+
 static void build_background(void)
 {
     if (!background.buffer)
@@ -277,7 +304,6 @@ static void build_background(void)
 }
 
 static uint32_t selftest_hash;
-static bool selftest_pass, debug;
 static uint32_t last_ticks;
 
 static void text(int x, int y, const char *fmt, ...)
@@ -297,15 +323,21 @@ static void render(const char *status, bool wait)
     load_level_sheets();
     if (background_level != level_index)
         build_background();
+    if (game.paused != PAUSE_CONTROLS)
+        controls_cached = false;
+    else if (!controls_cached)
+        cache_controls();
     surface_t *disp = display_get();
     uint32_t start = TICKS_READ();
     g_last_fb = (uint32_t)disp->buffer;
     rdpq_attach(disp, NULL);
-    rmode = RMODE_NONE;
-    scene_draw_sky(&game, &draw_api);
-    use_mode(RMODE_COPY);
-    rdpq_tex_blit(&background, 0, 0, NULL);
-    scene_draw(&game, &draw_api, debug);
+    if (controls_cached) {
+        rdpq_set_mode_copy(false);      /* every texel, whatever its alpha bit */
+        rmode = RMODE_NONE;
+        rdpq_tex_blit(&controls_frame, 0, 0, NULL);
+    } else {
+        draw_frame();
+    }
 
     if (!selftest_pass || debug)
         text(VIEW_W - TEXT_CW * 17, VIEW_H - 12, "ST %08lx %s", (unsigned long)selftest_hash,

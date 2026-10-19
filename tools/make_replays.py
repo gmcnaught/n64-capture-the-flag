@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Script the golden replays in tests/replays (tools/replay_builder.py).
 
-usage: make_replays.py      (then `make replay-update` to record hashes)
+usage: make_replays.py [NAME ...]   (then `make replay-update` to record hashes)
 
-Routes come from the route finder (tools/routefind.c, built by `make host`)
-on the current build/assets/levels/arena.lvl, so they follow level edits;
-every landing on the way is checked against the route. A level where a
-team cannot capture all three flags fails `capture` / `capture_blue`.
+Writes every scenario below, or only the named ones. Routes come from the
+route finder (tools/routefind.c, built by `make host`) on the replay's
+level in build/assets/levels, so they follow level edits; every landing
+on the way is checked against the route. A level where a team cannot
+capture all three flags fails its `capture` / `capture_blue`.
 
 Every scenario first waits out the round countdown (3, 2, 1, GO!).
 
@@ -40,9 +41,18 @@ Every scenario first waits out the round countdown (3, 2, 1, GO!).
                 wraps up to QUIT TO TITLE and P2 picks it with attack: title
                 screen, where input moves nothing; P2's jump starts a new
                 match, which moves after its countdown.
+  ice_slide     Snow stage. P1 stops within 8 px on plain floor; then jumps
+                the bump onto the ice floor at full speed, lets go and
+                slides at least 60 px before stopping; from rest on the
+                ice it takes more than 30 frames to reach full speed.
+  snow_capture  capture on the Snow stage (ice floor by the flags, ice
+                slabs): each team can still win.
+  snow_capture_blue  capture_blue on the Snow stage.
 """
+import re
 import os
 import subprocess
+import sys
 import tempfile
 
 from replay_builder import ROOT, Builder
@@ -52,7 +62,7 @@ HEADER = "level arena.lvl\nabilities 7\n"
 NO_FRUIT = HEADER + "tune fruit_min 60000\n"
 OUT = os.path.join(ROOT, "tests", "replays")
 ROUTEFIND = os.path.join(ROOT, "platform", "host", "build", "routefind")
-LEVEL = os.path.join(ROOT, "build", "assets", "levels", "arena.lvl")
+LEVELS = os.path.join(ROOT, "build", "assets", "levels")
 FLAGS = {0: [0, 1, 2], 1: [3, 4, 5]}     # Game.flags indices per team (entity order)
 COUNTDOWN = 3 * 60 + 40                 # COUNTDOWN_FRAMES (core/game.h)
 COUNTDOWN_GO = 40
@@ -86,7 +96,8 @@ def find_route(b, side, target):
         f.write(b.text())
         path = f.name
     try:
-        out = subprocess.run([ROUTEFIND, LEVEL, path, str(side), target],
+        level = os.path.join(LEVELS, re.search(r"^level (\S+)", b.header, re.M).group(1))
+        out = subprocess.run([ROUTEFIND, level, path, str(side), target],
                              capture_output=True, text=True).stdout.split("\n")
     finally:
         os.unlink(path)
@@ -141,9 +152,9 @@ def route(b, side, target, done=None):
     return s
 
 
-def capture_team(side):
+def capture_team(side, level="arena.lvl"):
     """Player side captures the other team's three flags into its goal."""
-    b = Builder(NO_FRUIT)
+    b = Builder(NO_FRUIT.replace("arena.lvl", level))
     countdown(b)
     b.hold("C / C", 10)
     left = list(FLAGS[1 - side])
@@ -173,6 +184,36 @@ def capture():
 
 def capture_blue():
     return capture_team(1)
+
+
+def snow_capture():
+    return capture_team(0, "snow.lvl")
+
+
+def snow_capture_blue():
+    return capture_team(1, "snow.lvl")
+
+
+def ice_slide():
+    b = Builder(NO_FRUIT.replace("arena.lvl", "snow.lvl"))
+    countdown(b)
+    s = b.hold("LC / C", until=lambda s: s.p[0].x <= 250, limit=60)
+    check(s.p[0].vx == -2.7, "P1 not at full speed on the floor", s)
+    x = s.p[0].x
+    s = b.hold("C / C", until=lambda s: s.p[0].vx == 0, limit=30)
+    check(x - s.p[0].x <= 8, "P1 slid on plain floor", s)
+    b.hold("LC / C", until=lambda s: s.p[0].x <= 244, limit=60)
+    b.hold("LJC / C", 12)
+    s = b.hold("LC / C", until=lambda s: s.p[0].grounded and s.p[0].x <= 150, limit=120)
+    check(s.p[0].vx == -2.7, "P1 not at full speed on the ice", s)
+    x = s.p[0].x
+    s = b.hold("C / C", until=lambda s: s.p[0].vx == 0, limit=120)
+    check(x - s.p[0].x >= 60, "P1 stopped short on the ice", s)
+    start = s.frame
+    s = b.hold("RC / C", until=lambda s: s.p[0].vx >= 2.7, limit=120)
+    check(s.frame - start > 30, "P1 reached full speed quickly on the ice", s)
+    b.hold("C / C", 60)
+    return b
 
 
 def steal_drop():
@@ -349,7 +390,12 @@ def menu():
 def main():
     os.makedirs(OUT, exist_ok=True)
     docs = __doc__.split("\n  ")
-    for fn in (capture, capture_blue, steal_drop, duel, stack, water, menu):
+    scenarios = (capture, capture_blue, steal_drop, duel, stack, water, menu, ice_slide,
+                 snow_capture, snow_capture_blue)
+    names = sys.argv[1:]
+    for fn in scenarios:
+        if names and fn.__name__ not in names:
+            continue
         comment = next(d for d in docs if d.startswith(fn.__name__ + " "))
         fn().save(os.path.join(OUT, fn.__name__ + ".rpl"), " ".join(comment.split()))
 

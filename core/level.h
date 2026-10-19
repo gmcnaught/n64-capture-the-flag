@@ -6,12 +6,13 @@
  * cell is TILE_W x TILE_H = 16 x 8 sim px: the arena is 40x30 cells.
  *
  * Binary format (big-endian, written by tools/ldtk_import.py):
- *   char     magic[4] = "LVL2"
+ *   char     magic[4] = "LVL3" ("LVL2": no surfaces, also read)
  *   u16      cell_w, cell_h             size in cells
  *   u16      layer_count, entity_count
  *   u8       weather, music, backdrop, tileset (render/audio ids; backdrop: BACKDROP_*,
  *                                       tileset: platform/common/tilesets.h)
- *   u8       cells[cell_w * cell_h]     collision values (CELL_*)
+ *   u8       cells[cell_w * cell_h]     low nibble: collision value (CELL_*),
+ *                                       high nibble: surface (SURFACE_*)
  *   (pad to an even offset)
  *   layer_count times:
  *     i16    parallax_x, parallax_y     Q8.8; unused (the camera is fixed)
@@ -56,6 +57,9 @@ enum {
     ENT_FRUIT_SPOT = 8, /* where a water fruit can appear (core/game.h) */
 };
 
+/* Surfaces: what a solid or one-way cell's top is made of. */
+enum { SURFACE_NONE = 0, SURFACE_ICE = 1 };
+
 /* Backdrops (sky and scenery sheet pairs, tools/scenery.py BACKDROPS order):
  * the level's is the default, the title screen can pick another. */
 enum { BACKDROP_FOREST, BACKDROP_DESERT, BACKDROP_MOON, BACKDROP_SKY, BACKDROP_COUNT };
@@ -86,6 +90,7 @@ typedef struct Level {
     int16_t px_w, px_h;
     uint16_t layer_count, entity_count;
     uint8_t weather, music, backdrop, tileset;
+    uint16_t surfaces;          /* bit 1 << SURFACE_* for each surface the level has */
     const uint8_t *cells;
     const uint8_t *layers;      /* first layer header */
     const uint8_t *entities;    /* first entity record */
@@ -99,6 +104,9 @@ int level_load(Level *lv, const uint8_t *data, uint32_t size);
 /* Collision value of a cell. Outside the level, sides and top are solid and
  * below the bottom is empty (falling out = pit). */
 uint8_t level_cell(const Level *lv, int cx, int cy);
+
+/* Surface of a cell (SURFACE_*); none outside the level. */
+uint8_t level_surface(const Level *lv, int cx, int cy);
 
 void level_entity(const Level *lv, int i, LevelEntity *out);
 

@@ -18,6 +18,8 @@ view only and are not read.
 
 Level rules (errors stop the import):
   - 8 px grid; one IntGrid layer named "Collision" (values 1-4);
+  - optional IntGrid layer "Surface" (1 = ice), only on solid and one-way
+    cells: the high nibble of each cell (core/level.h SURFACE_*);
   - entities: see ENTITY_TYPES (at most one start and goal per team, up
     to MAX_FLAGS flags per team; goals are resizable zones);
   - optional level fields: Music (Int), Backdrop (String, a
@@ -63,6 +65,16 @@ def convert(level):
         errors.append(f"Collision grid {coll['__gridSize']} px, expected {GRID}")
     if any(v not in (0, 1, 2, 3, 4) for v in cells):
         errors.append("Collision values must be 0-4")
+    surf = [li for li in layers if li["__identifier"] == "Surface" and li["__type"] == "IntGrid"]
+    surface = surf[0]["intGridCsv"] if surf else [0] * len(cells)
+    if len(surface) != len(cells):
+        errors.append("Surface layer must match the Collision grid")
+        surface = [0] * len(cells)
+    for i, (c, s) in enumerate(zip(cells, surface)):
+        if s not in (0, terrain.SURFACE_ICE):
+            errors.append(f"Surface value {s} at cell {i % w},{i // w}: only 1 (ice)")
+        elif s and c not in (1, 2):
+            errors.append(f"Surface at cell {i % w},{i // w}: not on a solid or one-way cell")
 
     lf = fields(level)
     backdrop, tileset = lf.get("Backdrop") or "forest", lf.get("Tileset") or "arena"
@@ -72,7 +84,8 @@ def convert(level):
         errors.append(f"Tileset {tileset!r}: one of {', '.join(TILESETS)}")
     cell = lambda x, y: cells[y * w + x] if 0 <= x < w and 0 <= y < h else 1
     fills = terrain.fill_count(tileset) if tileset in TILESETS else 0
-    grid = [terrain.tile_index(cell, x, y, fills) for y in range(h) for x in range(w)]
+    grid = [terrain.tile_index(cell, x, y, fills, surface[y * w + x])
+            for y in range(h) for x in range(w)]
     tile_layers = [[TILE_EMPTY if t is None else t for t in grid]]
 
     entities, seen = [], set()
@@ -101,11 +114,11 @@ def convert(level):
             print(f"{name}: {e}", file=sys.stderr)
         raise SystemExit(1)
 
-    out = bytearray(b"LVL2")
+    out = bytearray(b"LVL3")
     out += struct.pack(">HHHH", w, h, len(tile_layers), len(entities))
     out += struct.pack(">BBBB", 0, lf.get("Music") or 0, BACKDROPS.index(backdrop),
                        TILESETS.index(tileset))
-    out += bytes(cells)
+    out += bytes(c | s << 4 for c, s in zip(cells, surface))
     if len(out) & 1:
         out += b"\0"
     for grid in tile_layers:

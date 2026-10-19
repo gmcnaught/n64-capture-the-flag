@@ -1,0 +1,15 @@
+# ice_slide Snow stage. P1 stops within 8 px on plain floor; then jumps
+level snow.lvl
+abilities 7
+tune fruit_min 0x0000ea60
+220 C / C
+14 LC / C
+5 C / C
+1 LC / C
+12 LJC / C
+39 LC / C
+54 C / C
+44 RC / C
+60 C / C
+hash 5e7290d7
+kos 0 0

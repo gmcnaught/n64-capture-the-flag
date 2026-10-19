@@ -45,6 +45,8 @@
     .weight_jump        = 0x00030000, /* 3.0000 */ \
     .fruit_min          = 900, \
     .fruit_range        = 600, \
+    .ice_accel          = 0x00001000, /* 0.0625 */ \
+    .ice_decel          = 0x00000ccd, /* 0.0500 */ \
 }
 
 #endif

@@ -140,6 +140,9 @@ typedef struct {
     uint8_t abilities;
     uint16_t prev_buttons[TEAM_COUNT];
     uint32_t frame;
+    uint32_t anim;                  /* frames not paused: clock for scenery and object
+                                     * animation, which stops while paused (render
+                                     * only, not hashed) */
     uint8_t title;                  /* title screen: the sim waits for Start */
     uint8_t paused;                 /* 0, PAUSE_MENU or PAUSE_CONTROLS */
     uint8_t menu_sel;               /* pause menu cursor, MENU_* */

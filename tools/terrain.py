@@ -21,8 +21,10 @@ tileset byte is the index) are in sim px, 16x8 per cell, BLOB_COLS cells
 per row: the blob tiles in blob_masks() order, the one-way platform tiles
 ONEWAY_*, the fill variants from FILL_FIRST, and from EXTRA_FIRST the
 ladder and spike tiles of arena.png (LADDER_*, SPIKES), the same in
-every sheet. tile_index() is a cell's tile, used by tools/ldtk_import.py
-to write each level's tile layer. Sources:
+every sheet, and from ICE_FIRST an ice-colored copy of the first
+EXTRA_FIRST (cells with SURFACE_ICE, core/level.h). tile_index() is a
+cell's tile, used by tools/ldtk_import.py to write each level's tile
+layer. Sources:
   arena   assets/src/tilesets/arena.png, 8x8 art px tiles, each quarter
           4x4 art px, stretched 2x wide
   rocky_* Rocky Roads 16x16 tilesets at full width and 8 of 16 rows. One
@@ -35,6 +37,7 @@ python3 tools/terrain.py OUT_DIR writes each sheet and an arena preview
 per tileset (build/assets/levels/arena.lvl, build/assets/n64 backdrops)
 to OUT_DIR.
 """
+import colorsys
 import os
 import struct
 import sys
@@ -235,6 +238,23 @@ FILL_FIRST = 51
 EXTRA_FIRST = 4 * BLOB_COLS
 LADDER_TOP, LADDER_MID, LADDER_BOTTOM, SPIKES = range(EXTRA_FIRST, EXTRA_FIRST + 4)
 EXTRAS = [204, 205, 206, 207]           # arena.png ids, in LADDER_TOP.. order
+ICE_FIRST = EXTRA_FIRST + BLOB_COLS
+SURFACE_ICE = 1                         # core/level.h SURFACE_ICE
+
+
+def icy(im):
+    """Ice colors: every pixel pale cyan, as bright as it was (brighter
+    pixels less saturated)."""
+    out = im.copy()
+    px = out.load()
+    for y in range(out.height):
+        for x in range(out.width):
+            r, g, b, a = px[x, y]
+            if a:
+                v = min(1.0, 0.35 + 0.75 * max(r, g, b) / 255)
+                r, g, b = colorsys.hsv_to_rgb(0.52, 0.6 * (1.15 - v), v)
+                px[x, y] = (round(r * 255), round(g * 255), round(b * 255), a)
+    return out
 
 
 def sheet(name):
@@ -249,6 +269,8 @@ def sheet(name):
     tiles += [None] * (EXTRA_FIRST - len(tiles))
     arena = Source("arena")
     tiles += [to_cell(arena.tile(t), None) for t in EXTRAS]
+    tiles += [None] * (ICE_FIRST - len(tiles))
+    tiles += [im and icy(im) for im in tiles[:EXTRA_FIRST]]
     rows = (len(tiles) + BLOB_COLS - 1) // BLOB_COLS
     out = Image.new("RGBA", (BLOB_COLS * CELL_W, rows * CELL_H))
     for i, im in enumerate(tiles):
@@ -261,12 +283,18 @@ def fill_count(name):
     return len(TILESETS[name][2].get("fills", []))
 
 
-def tile_index(cell, x, y, fills=0):
+def tile_index(cell, x, y, fills=0, surface=0):
     """Sheet index for cell (x, y); cell(x, y) -> CELL_* value (1 solid,
     2 one-way, 3 hazard, 4 ladder), outside the level counted solid. None
-    for empty cells.
-    fills: fill_count() of the sheet. A fully solid cell is plain fill
-    2 times in fills + 2, else variant (position hash)."""
+    for empty cells. fills: fill_count() of the sheet. surface: the
+    cell's SURFACE_* (ice: the ice copy of its tile)."""
+    i = terrain_index(cell, x, y, fills)
+    return i + ICE_FIRST if surface == SURFACE_ICE and i is not None and i < EXTRA_FIRST else i
+
+
+def terrain_index(cell, x, y, fills):
+    """tile_index without the surface. A fully solid cell is plain fill 2
+    times in fills + 2, else a variant (position hash)."""
     c = cell(x, y)
     if c == 1:
         m = blob_mask(lambda x, y: cell(x, y) == 1, x, y)
@@ -317,7 +345,7 @@ def preview(out_dir):
         frame.alpha_composite(Image.open(os.path.join(n64, f"scenery_{backdrop}.png")).convert("RGBA"))
         for y in range(ch):
             for x in range(cw):
-                i = tile_index(cell, x, y, fill_count(name))
+                i = tile_index(cell, x, y, fill_count(name), cells[y * cw + x] >> 4)
                 if i is not None:
                     c, r = i % BLOB_COLS * CELL_W, i // BLOB_COLS * CELL_H
                     frame.alpha_composite(sh.crop((c, r, c + CELL_W, r + CELL_H)),

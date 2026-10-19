@@ -14,7 +14,7 @@ static uint32_t layer_bytes(const Level *lv)
 int level_load(Level *lv, const uint8_t *data, uint32_t size)
 {
     if (size < LEVEL_HEADER_BYTES || data[0] != 'L' || data[1] != 'V' || data[2] != 'L' ||
-        data[3] != '2')
+        (data[3] != '2' && data[3] != '3'))
         return 1;
     *lv = (Level){0};
     lv->cell_w = be16(data + 4);
@@ -33,6 +33,11 @@ int level_load(Level *lv, const uint8_t *data, uint32_t size)
     uint32_t off = LEVEL_HEADER_BYTES;
     lv->cells = data + off;
     off += (uint32_t)lv->cell_w * lv->cell_h;
+    if (off > size)
+        return 3;
+    for (uint32_t i = 0; i < (uint32_t)lv->cell_w * lv->cell_h; i++)
+        lv->surfaces |= (uint16_t)(1u << (lv->cells[i] >> 4));
+    lv->surfaces &= (uint16_t)~(1u << SURFACE_NONE);
     off = (off + 1u) & ~1u;
     lv->layers = data + off;
     off += layer_bytes(lv) * lv->layer_count;
@@ -44,8 +49,15 @@ int level_load(Level *lv, const uint8_t *data, uint32_t size)
 uint8_t level_cell(const Level *lv, int cx, int cy)
 {
     if (cx >= 0 && cx < lv->cell_w && cy >= 0 && cy < lv->cell_h)
-        return lv->cells[cy * lv->cell_w + cx];
+        return lv->cells[cy * lv->cell_w + cx] & 0x0f;
     return cy >= lv->cell_h ? CELL_EMPTY : CELL_SOLID;
+}
+
+uint8_t level_surface(const Level *lv, int cx, int cy)
+{
+    if (cx >= 0 && cx < lv->cell_w && cy >= 0 && cy < lv->cell_h)
+        return lv->cells[cy * lv->cell_w + cx] >> 4;
+    return SURFACE_NONE;
 }
 
 void level_entity(const Level *lv, int i, LevelEntity *out)

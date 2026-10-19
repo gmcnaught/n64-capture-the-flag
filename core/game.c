@@ -654,6 +654,8 @@ void game_tick(Game *g, const InputState in[TEAM_COUNT])
     }
     g->sfx = 0;
     g->frame++;
+    if (!g->paused)
+        g->anim++;
 
     if (g->title) {                 /* title screen: the sim waits */
         if ((pressed[0] | pressed[1]) & (BTN_START | BTN_JUMP)) {
@@ -842,7 +844,10 @@ uint32_t game_hash(const Game *g)
     for (int i = 0; i < g->water_len; i++)
         h = mix(h, (uint16_t)g->water_cx[i] | (uint32_t)(uint16_t)g->water_cy[i] << 16);
     h = mix(h, g->caught[0] | (uint32_t)g->caught[1] << 8);
-    for (int i = 0; i < tuning_field_count; i++)
+    int fields = tuning_field_count;
+    if (!(g->lv.surfaces & (1u << SURFACE_ICE)))
+        fields -= ICE_TUNING_FIELDS;            /* earlier replays keep their hashes */
+    for (int i = 0; i < fields; i++)
         h = mix(h, (uint32_t)*(const int32_t *)((const char *)&g->tuning + tuning_fields[i].offset));
     return h;
 }
