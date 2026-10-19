@@ -20,7 +20,9 @@ canvas, with 3800-wide layers holding two screens of a horizontal loop
 (the first is used). Each set is scaled to 640 columns (all of it across
 the screen) and bottom-aligned; the sky's top color fills above. The
 pack's sky layers tile horizontally, and are scaled with wrapped edges so
-the 640 px sheets still do. Without the pack, every backdrop falls back to
+the 640 px sheets still do. Cloud layers (sky layers after the first) get
+domed tops where a cloud runs off the canvas top (round_tops: the desert
+tower is cut flat there, which showed at sim y 72). Without the pack, every backdrop falls back to
 The Pixel Nook mountains and the Rocky Roads clouds and trees (art px,
 stretched 2x like every other sheet), its sky made tileable by mirroring
 its left half.
@@ -58,6 +60,37 @@ def load(path):
     return Image.open(path).convert("RGBA")
 
 
+def round_tops(im):
+    """Cloud layer im with each shape that runs off its top edge (the
+    desert's tall cloud is cut flat there in the pack) given a domed top:
+    over the top w/3 rows of a w px wide run on row 0, pixels outside a
+    half ellipse fade out (one px of soft edge)."""
+    out = im.copy()
+    alpha = out.getchannel("A")
+    a = alpha.load()
+    top = [a[x, 0] > 0 for x in range(im.width)] + [False]
+    x = 0
+    while x < im.width:
+        if not top[x]:
+            x += 1
+            continue
+        end = x
+        while top[end]:
+            end += 1
+        rx, ry = (end - x) / 2, max(1, (end - x) // 3)
+        cx = x + rx
+        for y in range(ry):
+            for px in range(x, end):
+                # distance outside the ellipse centered (cx, ry), in px
+                u, v = (px + 0.5 - cx) / rx, (ry - y - 0.5) / ry
+                d = ((u * u + v * v) ** 0.5 - 1) * min(rx, ry)
+                if d > 0:
+                    a[px, y] = round(a[px, y] * max(0.0, 1 - d))
+        x = end
+    out.putalpha(alpha)
+    return out
+
+
 def resize(im, w, h, wrap):
     """Scale to w x h; wrap: as a horizontal loop (padded with its other
     end by 1/20 of the width, so the edges are resampled as neighbors)."""
@@ -85,12 +118,14 @@ def forest_layer(name, rows, wrap):
     return resize(im, VIEW_W, rows, wrap)
 
 
-def screen_layer(folder, name, rows, wrap):
+def screen_layer(folder, name, rows, wrap, cloud=False):
     """A layer on the 1900x1000 canvas (first screen of a 3800 loop),
-    scaled to 640 x rows."""
+    scaled to 640 x rows; cloud: round_tops first."""
     im = load(os.path.join(PACK, folder, name + ".png"))
     if im.width == 3800:
         im = im.crop((0, 0, 1900, im.height))
+    if cloud:
+        im = round_tops(im)
     return resize(im, VIEW_W, rows, wrap)
 
 
@@ -102,11 +137,13 @@ def pack_backdrop(folder, sky_names, scenery_names):
         layer = lambda n, wrap=False: forest_layer(n, rows, wrap)
     else:
         rows = round(1000 * 320 / 1900)
-        layer = lambda n, wrap=False: screen_layer(folder, n, rows, wrap)
+        layer = lambda n, wrap=False, cloud=False: screen_layer(folder, n, rows, wrap, cloud)
     top = VIEW_H - rows
     sky_layer = Image.new("RGBA", (SKY_W, rows))
-    for name in sky_names:
-        sky_layer.alpha_composite(layer(name, wrap=True))
+    for i, name in enumerate(sky_names):
+        # after the base sky: cloud layers
+        sky_layer.alpha_composite(layer(name, wrap=True, cloud=i > 0) if folder != "forest"
+                                  else layer(name, wrap=True))
     sky = Image.new("RGBA", (SKY_W, VIEW_H), sky_layer.getpixel((0, 0)))
     sky.alpha_composite(sky_layer, (0, top))
     scenery = Image.new("RGBA", (VIEW_W, VIEW_H))
