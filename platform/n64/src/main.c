@@ -1,13 +1,18 @@
 /* N64 (libdragon) build: plays the core in a 640x240 progressive
  * framebuffer; the shared scene renderer (platform/common/scene.c) draws
- * through rdpq. Sheets are built 2x wide, so blits are 1:1 and unflipped
- * ones use copy mode. The mountains, trees and tile layers (up to 1200
- * tiles) are drawn once per level into a 640x240 buffer with transparent
- * gaps; each frame draws the sky and drifting clouds, then copies the
- * buffer over them (copy mode skips its transparent texels).
+ * through rdpq. Sheets are built at sim resolution, so blits are 1:1 and
+ * unflipped ones use copy mode. The mountains, trees and tile layers (up
+ * to 1200 tiles) are drawn once per level into a 640x240 buffer with
+ * transparent gaps; each frame draws the sky and drifting clouds, then
+ * copies the buffer over them (copy mode skips its transparent texels).
+ * Only the current backdrop's sky and scenery sheets and the level's
+ * tileset sheet are in memory: a backdrop or stage change on the title
+ * screen reloads them and rebuilds the buffer.
  *
  * Controllers 1 and 2: stick/D-pad move, A jump, Z or R dash, B attack,
- * Start start / pause (menu: up/down, A picks). Boots to the title screen.
+ * Start start / pause (menu: up/down, A picks). Boots to the title screen
+ * (up/down row, left/right stage or background; a stage change loads that
+ * level).
  * Debug (controller 1): L next level, C-down restart (skips the title),
  * C-up debug overlay.
  *
@@ -92,7 +97,15 @@ static void load_level(int i)
     level_data = data;
     int err = level_load(&level, data, (uint32_t)size);
     assertf(err == 0, "%s: bad level data (%d)", path, err);
+    level.name = level_names[i];
     level_index = i;
+}
+
+/* Title screen stage list: the level list, at the loaded level. */
+static void set_stages(void)
+{
+    game.stage = (uint8_t)level_index;
+    game.stage_count = (uint8_t)level_count;
 }
 
 static void read_input(joypad_port_t port, InputState *in)
@@ -217,6 +230,37 @@ static const DrawApi draw_api = {d_blit, d_blit_tint, d_fill, d_text, NULL};
 
 static surface_t background;
 static int background_level = -1;   /* level_index drawn into background */
+static int sprites_backdrop = -1;   /* backdrop of sprites[SPR_SKY], sprites[SPR_SCENERY] */
+static int sprites_tileset = -1;    /* tileset of sprites[SPR_TILES] */
+
+static void load_sheet(int spr)
+{
+    char name[48], path[64];
+    scene_sheet_name(spr, game.backdrop, scene_tileset(&game.lv), name, sizeof name);
+    snprintf(path, sizeof path, "rom:/%s.sprite", name);
+    if (sprites[spr])
+        sprite_free(sprites[spr]);
+    sprites[spr] = sprite_load(path);
+}
+
+/* Swap in the sheets of the game's backdrop and tileset if they changed
+ * (after the RDP is done with the old ones). */
+static void load_level_sheets(void)
+{
+    int tileset = scene_tileset(&game.lv);
+    if (sprites_backdrop == game.backdrop && sprites_tileset == tileset)
+        return;
+    rspq_wait();
+    if (sprites_backdrop != game.backdrop) {
+        load_sheet(SPR_SKY);
+        load_sheet(SPR_SCENERY);
+    }
+    if (sprites_tileset != tileset)
+        load_sheet(SPR_TILES);
+    sprites_backdrop = game.backdrop;
+    sprites_tileset = tileset;
+    background_level = -1;
+}
 
 static void build_background(void)
 {
@@ -248,6 +292,7 @@ static void text(int x, int y, const char *fmt, ...)
  * the RDP finished it). */
 static void render(const char *status, bool wait)
 {
+    load_level_sheets();
     if (background_level != level_index)
         build_background();
     surface_t *disp = display_get();
@@ -476,8 +521,11 @@ int main(void)
     rdpq_text_register_font(1, rdpq_font_load_builtin(FONT_BUILTIN_DEBUG_MONO));
 
     for (int i = 0; i < SPR_COUNT; i++) {
-        char path[64];
-        snprintf(path, sizeof path, "rom:/%s.sprite", scene_sprite_names[i]);
+        char name[48], path[64];
+        if (i == SPR_SKY || i == SPR_SCENERY || i == SPR_TILES)
+            continue;               /* per backdrop and tileset: load_level_sheets */
+        scene_sheet_name(i, 0, 0, name, sizeof name);
+        snprintf(path, sizeof path, "rom:/%s.sprite", name);
         sprites[i] = sprite_load(path);
     }
     level_count = read_list("rom:/levels.txt", level_names, MAX_LEVELS);
@@ -494,6 +542,7 @@ int main(void)
 
     load_level(0);
     game_init(&game, &level, NULL, ABIL_ALL);
+    set_stages();
     game_title(&game);
     while (1) {
         joypad_poll();
@@ -501,8 +550,10 @@ int main(void)
         if (pressed.l) {            /* debug: next level */
             load_level((level_index + 1) % level_count);
             game_init(&game, &level, NULL, ABIL_ALL);
+            set_stages();
         } else if (pressed.c_down) {
             game_init(&game, &level, NULL, ABIL_ALL);
+            set_stages();
         }
         if (pressed.c_up)
             debug = !debug;
@@ -511,6 +562,10 @@ int main(void)
         read_input(JOYPAD_PORT_1, &in[0]);
         read_input(JOYPAD_PORT_2, &in[1]);
         tick(in);
+        if (game.stage != level_index) {
+            load_level(game.stage);
+            game_set_level(&game, &level);
+        }
         sound_update(game.sfx, audio_music(&game));
         render(NULL, false);
     }

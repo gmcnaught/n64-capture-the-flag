@@ -6,13 +6,16 @@ usage: build_sprites.py <assets_dir>
 Writes <assets_dir>/n64/<name>.png (mksprite input) and
 <assets_dir>/host/<name>.rgba (raw RGBA: "RGBA", u16 w, u16 h big-endian,
 then w*h*4 bytes) for each sheet in platform/common/scene.c's
-scene_sprite_names. Sources are the square-pixel art packs in new-assets/;
+scene_sheet_name: the tiles once per tileset, the sky and scenery ones
+once per backdrop. Sources are the square-pixel art packs in new-assets/;
 every sheet is stretched 2x horizontally (nearest), because the game runs
 at 640x240 where a 4:3 display shows pixels half as wide (core/level.h).
 Layouts below are in art px (before the stretch):
 
-  tiles     assets/src/tilesets/arena.png (tools/make_tileset.py), 8x8 cells,
-            17 columns (Tiny Adventure Forest ground)
+  tiles_<tileset>  terrain (tools/terrain.py), already at sim resolution:
+            16x8 sim px cells, 16 columns; corners, edges and fill built
+            from assets/src/tilesets/arena.png (Tiny Adventure Forest) or a
+            Rocky Roads tileset; also writes platform/common/tilesets.h
   p1        Dino Characters "mort" (red), 24x24 frames, one row per animation
             in core/player.h order (DINO_ANIMS): idle, run, jump, climb,
             death, hurt, attack, then dash (tools/effects.py: a run frame
@@ -22,8 +25,9 @@ Layouts below are in art px (before the stretch):
   flag      Rocky Roads flag halved (nearest): 9 frames of 16x16; row 0 red
             (team 1), row 1 recolored blue (team 2), row 2 (first cell) a
             dotted outline of frame 0 for empty goal stands
-  sky, scenery  the backdrop (tools/scenery.py), already at sim resolution
-            (640 wide, not stretched)
+  sky_<backdrop>, scenery_<backdrop>  the backdrops (tools/scenery.py),
+            already at sim resolution (640 wide, not stretched); also writes
+            their names and sky heights to platform/common/backdrops.h
   hud       Rocky Roads hearts halved (nearest): full, 3/4, 1/2, empty, 8x8
   fruit     Rocky Roads apple halved (nearest) and recolored blue: the water
             fruit, 8x8
@@ -45,6 +49,7 @@ import controls
 import effects
 import font
 import scenery
+import terrain
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROCKY = os.path.join(ROOT, "new-assets", "RockyRoads", "Rocky Roads")
@@ -128,7 +133,6 @@ def stack(images):
 
 
 def sheets():
-    yield "tiles", load(os.path.join(ROOT, "assets", "src", "tilesets", "arena.png"))
     yield "p1", dino("mort")
     yield "p2", dino("doux")
     pad = load(os.path.join(ROCKY, "Objects", "bounce pad.png"))
@@ -151,22 +155,23 @@ def main():
     out = sys.argv[1]
     os.makedirs(os.path.join(out, "n64"), exist_ok=True)
     os.makedirs(os.path.join(out, "host"), exist_ok=True)
-    native = scenery.sheets()           # already 640 wide
-    for name, im in list(sheets()) + native:
-        if (name, im) not in native:
-            im = im.resize((im.width * 2, im.height), Image.NEAREST)
+    native = scenery.sheets()           # already at sim resolution
+    native += [("tiles_" + n, terrain.sheet(n)) for n in terrain.TILESETS]
+    for name, im in [(n, im.resize((im.width * 2, im.height), Image.NEAREST))
+                     for n, im in sheets()] + native:
         if im.width > 1024:
             raise SystemExit(f"{name}: {im.width} px wide, RDP textures are at most 1024")
         im.save(os.path.join(out, "n64", name + ".png"))
         with open(os.path.join(out, "host", name + ".rgba"), "wb") as f:
             f.write(b"RGBA" + struct.pack(">HH", im.width, im.height) + im.tobytes())
         print(f"{name}: {im.width}x{im.height}")
-    path = os.path.join(ROOT, "platform", "common", "font_glyphs.h")
-    text = font.header()
-    if not os.path.exists(path) or open(path).read() != text:
-        with open(path, "w") as f:
-            f.write(text)
-        print(f"wrote {os.path.relpath(path, ROOT)}")
+    for name, text in [("font_glyphs.h", font.header()), ("backdrops.h", scenery.header()),
+                       ("tilesets.h", terrain.header())]:
+        path = os.path.join(ROOT, "platform", "common", name)
+        if not os.path.exists(path) or open(path).read() != text:
+            with open(path, "w") as f:
+                f.write(text)
+            print(f"wrote {os.path.relpath(path, ROOT)}")
 
 
 if __name__ == "__main__":

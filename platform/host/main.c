@@ -20,8 +20,9 @@
  *
  * Keys: P1 WASD move, Space jump, F attack, Left Shift dash; P2 arrows
  * move, Right Shift jump, / attack, . dash; Enter start / pause (menu:
- * up/down, jump picks). Gamepad 1 also controls P1, gamepad 2 P2. Starts
- * on the title screen (a replay starts in play).
+ * up/down, jump picks; title screen: up/down row, left/right stage or
+ * background). Gamepad 1 also controls P1, gamepad 2 P2. Starts on the
+ * title screen (a replay starts in play).
  * Debug: Backspace restart (skips the title), Tab next level, P freeze, N step one frame
  * (frozen), F1 debug overlay, F2 tuning panel ([ ] select, - = adjust,
  * Shift = x16, F5 write core/player_tuning.h, F9 defaults), F11 /
@@ -90,8 +91,10 @@ static void load_level_list(void)
 
 static uint8_t *level_data;
 static Level level;
+static char level_name[64];
 
-/* The game keeps pointers into level_data: reload only before game_init. */
+/* The game keeps pointers into level_data: reload only before game_init
+ * or game_set_level. */
 static int load_level(const char *name)
 {
     char path[512];
@@ -109,7 +112,19 @@ static int load_level(const char *name)
     }
     free(level_data);
     level_data = data;
+    snprintf(level_name, sizeof level_name, "%s", name);
+    level.name = level_name;
     return 0;
+}
+
+/* Title screen stage list: the level list, at the current level. */
+static void set_stages(Game *g)
+{
+    for (int i = 0; i < level_count; i++)
+        if (!strcmp(level_names[i], level_name)) {
+            g->stage = (uint8_t)i;
+            g->stage_count = (uint8_t)level_count;
+        }
 }
 
 /* ---- replays ----------------------------------------------------------- */
@@ -170,6 +185,8 @@ static int run_headless(const char *path, int check, int update, long max_frames
 
 static SDL_Renderer *ren;
 static SDL_Texture *sprites[SPR_COUNT];
+static int sprites_backdrop = -1;   /* backdrop of the SPR_SKY and SPR_SCENERY textures */
+static int sprites_tileset = -1;    /* tileset of the SPR_TILES texture */
 
 static SDL_Texture *load_rgba(const char *name)
 {
@@ -200,6 +217,18 @@ static SDL_Texture *load_rgba(const char *name)
     SDL_SetTextureScaleMode(t, SDL_SCALEMODE_NEAREST);
     free(d);
     return t;
+}
+
+/* Replace sheet spr with the one for g's backdrop and tileset. */
+static void reload_sheet(int spr, const Game *g)
+{
+    char name[64];
+    scene_sheet_name(spr, g->backdrop, scene_tileset(&g->lv), name, sizeof name);
+    SDL_Texture *t = load_rgba(name);
+    if (t) {
+        SDL_DestroyTexture(sprites[spr]);
+        sprites[spr] = t;
+    }
 }
 
 static void d_blit(void *ctx, int spr, int sx, int sy, int w, int h, int x, int y, int flip)
@@ -468,9 +497,14 @@ int main(int argc, char **argv)
         SDL_SetWindowFullscreen(win, true);
     SDL_SetRenderVSync(ren, 1);
     SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
-    for (int i = 0; i < SPR_COUNT; i++)
-        if (!(sprites[i] = load_rgba(scene_sprite_names[i])))
+    for (int i = 0; i < SPR_COUNT; i++) {
+        char name[64];
+        scene_sheet_name(i, BACKDROP_FOREST, 0, name, sizeof name);
+        if (!(sprites[i] = load_rgba(name)))
             return 1;
+    }
+    sprites_backdrop = BACKDROP_FOREST;
+    sprites_tileset = 0;
     if (!mute)
         sound_open(assets_dir);
 
@@ -479,6 +513,7 @@ int main(int argc, char **argv)
         replay_start(&playback, &g, &level);
     } else {
         game_init(&g, &level, &tuning, abilities);
+        set_stages(&g);
         game_title(&g);
     }
     Replay rec;
@@ -546,6 +581,7 @@ int main(int argc, char **argv)
         if (restart) {
             PlayerTuning t = g.tuning;
             game_init(&g, &level, &t, abilities);
+            set_stages(&g);
             if (record_path) {
                 replay_free(&rec);
                 replay_init(&rec, cur_level, g.abilities, &t);
@@ -578,9 +614,28 @@ int main(int argc, char **argv)
             if (record_path)
                 replay_push(&rec, &in[0], &in[1]);
             game_tick(&g, in);
+            if (g.stage_count > 1 && strcmp(level_names[g.stage], level_name)) {
+                snprintf(cur_level, sizeof cur_level, "%s", level_names[g.stage]);
+                if (load_level(cur_level) == 0) {
+                    game_set_level(&g, &level);
+                    if (record_path) {
+                        replay_free(&rec);
+                        replay_init(&rec, cur_level, g.abilities, &g.tuning);
+                    }
+                }
+            }
             if (!mute)
                 sound_update(g.sfx, audio_music(&g));
             frames++;
+        }
+        if (g.backdrop != sprites_backdrop) {
+            reload_sheet(SPR_SKY, &g);
+            reload_sheet(SPR_SCENERY, &g);
+            sprites_backdrop = g.backdrop;
+        }
+        if (scene_tileset(&g.lv) != sprites_tileset) {
+            reload_sheet(SPR_TILES, &g);
+            sprites_tileset = scene_tileset(&g.lv);
         }
 
         SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);

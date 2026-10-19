@@ -11,20 +11,27 @@ LDtk works in square art px on an 8 px grid. The game draws each art px 2
 sim px wide (640x240, core/level.h), so entity x and width are doubled;
 cells, tiles and y are unchanged.
 
+The level's one tile layer is made from the Collision grid with the
+level's tileset (tools/terrain.py tile_index: corners, edges and fill
+from each cell's neighbors). LDtk's own tile layers are for the editor
+view only and are not read.
+
 Level rules (errors stop the import):
   - 8 px grid; one IntGrid layer named "Collision" (values 1-4);
-  - Tiles/AutoLayer layers all use one tileset; non-empty ones are stored
-    bottom first. AutoLayer tiles are read from the baked autoLayerTiles
-    that LDtk saves;
   - entities: see ENTITY_TYPES (at most one start and goal per team, up
     to MAX_FLAGS flags per team; goals are resizable zones);
-  - optional level fields: Music (Int), Backdrop (Int).
+  - optional level fields: Music (Int), Backdrop (String, a
+    tools/scenery.py BACKDROPS name, default forest), Tileset (String, a
+    tools/terrain.py TILESETS name, default arena).
 """
 import argparse
 import json
 import os
 import struct
 import sys
+
+import scenery
+import terrain
 
 GRID = 8
 XS = 2                                  # sim px per art px, horizontally
@@ -34,7 +41,8 @@ UNIQUE = {"P1Start", "P2Start", "Goal1", "Goal2"}
 MAX_FLAGS = 3                           # per team (core/game.h FLAGS_PER_TEAM)
 TILE_EMPTY = 0xFFFF
 FLAG_NONE = 0xFFFF
-FLIP_X, FLIP_Y = 0x4000, 0x8000
+BACKDROPS = [b[0] for b in scenery.BACKDROPS]
+TILESETS = list(terrain.TILESETS)
 
 
 def fields(inst):
@@ -56,31 +64,16 @@ def convert(level):
     if any(v not in (0, 1, 2, 3, 4) for v in cells):
         errors.append("Collision values must be 0-4")
 
-    tile_layers = []
-    tileset = None
-    for li in reversed(layers):                     # LDtk lists top first
-        tiles = li["gridTiles"] + li["autoLayerTiles"]
-        if li["__type"] not in ("Tiles", "AutoLayer", "IntGrid") or li["__tilesetDefUid"] is None:
-            continue
-        if not tiles:                               # empty layer: nothing to draw
-            continue
-        if li["__gridSize"] != GRID or li["__cWid"] != w or li["__cHei"] != h:
-            errors.append(f"layer {li['__identifier']}: must match the Collision grid")
-            continue
-        if tileset not in (None, li["__tilesetDefUid"]):
-            errors.append(f"layer {li['__identifier']}: all tile layers must use one tileset")
-        tileset = li["__tilesetDefUid"]
-        grid = [TILE_EMPTY] * (w * h)
-        ox, oy = li["__pxTotalOffsetX"], li["__pxTotalOffsetY"]
-        for t in tiles:
-            x, y = (t["px"][0] + ox) // GRID, (t["px"][1] + oy) // GRID
-            if not (0 <= x < w and 0 <= y < h):
-                continue
-            if t["t"] > 0x0FFF:
-                errors.append(f"layer {li['__identifier']}: tile id {t['t']} > 4095")
-                continue
-            grid[y * w + x] = t["t"] | (FLIP_X if t["f"] & 1 else 0) | (FLIP_Y if t["f"] & 2 else 0)
-        tile_layers.append(grid)
+    lf = fields(level)
+    backdrop, tileset = lf.get("Backdrop") or "forest", lf.get("Tileset") or "arena"
+    if backdrop not in BACKDROPS:
+        errors.append(f"Backdrop {backdrop!r}: one of {', '.join(BACKDROPS)}")
+    if tileset not in TILESETS:
+        errors.append(f"Tileset {tileset!r}: one of {', '.join(TILESETS)}")
+    cell = lambda x, y: cells[y * w + x] if 0 <= x < w and 0 <= y < h else 1
+    fills = terrain.fill_count(tileset) if tileset in TILESETS else 0
+    grid = [terrain.tile_index(cell, x, y, fills) for y in range(h) for x in range(w)]
+    tile_layers = [[TILE_EMPTY if t is None else t for t in grid]]
 
     entities, seen = [], set()
     for li in layers:
@@ -108,10 +101,10 @@ def convert(level):
             print(f"{name}: {e}", file=sys.stderr)
         raise SystemExit(1)
 
-    lf = fields(level)
     out = bytearray(b"LVL2")
     out += struct.pack(">HHHH", w, h, len(tile_layers), len(entities))
-    out += struct.pack(">BBBB", 0, lf.get("Music") or 0, lf.get("Backdrop") or 0, 0)
+    out += struct.pack(">BBBB", 0, lf.get("Music") or 0, BACKDROPS.index(backdrop),
+                       TILESETS.index(tileset))
     out += bytes(cells)
     if len(out) & 1:
         out += b"\0"

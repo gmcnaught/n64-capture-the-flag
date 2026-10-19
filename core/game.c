@@ -170,8 +170,23 @@ void game_init(Game *g, const Level *lv, const PlayerTuning *tuning, uint8_t abi
         tuning_defaults(&g->tuning);
     g->abilities = abilities;
     g->rng = 0x2545f491u;
+    g->stage_count = 1;
+    g->backdrop = lv->backdrop < BACKDROP_COUNT ? lv->backdrop : BACKDROP_FOREST;
     read_entities(g);
     new_round(g);
+}
+
+void game_set_level(Game *g, const Level *lv)
+{
+    Game keep = *g;
+    game_init(g, lv, &keep.tuning, keep.abilities);
+    g->frame = keep.frame;
+    g->title = keep.title;
+    g->title_sel = keep.title_sel;
+    g->stage = keep.stage;
+    g->stage_count = keep.stage_count;
+    for (int t = 0; t < TEAM_COUNT; t++)
+        g->prev_buttons[t] = keep.prev_buttons[t];
 }
 
 /* ---- flags ------------------------------------------------------------------ */
@@ -607,6 +622,27 @@ static void pause_menu(Game *g, uint16_t pressed)
     }
 }
 
+/* Title screen rows: Up/Down pick one, Left/Right change it (wrapping). */
+static void title_menu(Game *g, uint16_t pressed)
+{
+    if (pressed & (BTN_UP | BTN_DOWN)) {
+        int step = (pressed & BTN_UP) ? TITLE_ROWS - 1 : 1;
+        g->title_sel = (uint8_t)((g->title_sel + step) % TITLE_ROWS);
+        g->sfx |= SFX_BIT(SFX_MENU);
+    }
+    int step = (pressed & BTN_RIGHT) ? 1 : (pressed & BTN_LEFT) ? -1 : 0;
+    if (!step)
+        return;
+    if (g->title_sel == TITLE_STAGE) {
+        if (g->stage_count < 2)
+            return;
+        g->stage = (uint8_t)((g->stage + step + g->stage_count) % g->stage_count);
+    } else {
+        g->backdrop = (uint8_t)((g->backdrop + step + BACKDROP_COUNT) % BACKDROP_COUNT);
+    }
+    g->sfx |= SFX_BIT(SFX_MENU);
+}
+
 /* ---- tick ------------------------------------------------------------------ */
 
 void game_tick(Game *g, const InputState in[TEAM_COUNT])
@@ -623,6 +659,8 @@ void game_tick(Game *g, const InputState in[TEAM_COUNT])
         if ((pressed[0] | pressed[1]) & (BTN_START | BTN_JUMP)) {
             new_match(g);
             g->sfx |= SFX_BIT(SFX_MENU);
+        } else {
+            title_menu(g, pressed[0] | pressed[1]);
         }
         return;
     }
@@ -777,6 +815,8 @@ uint32_t game_hash(const Game *g)
     h = mix(h, g->frame);
     h = mix(h, g->paused | (uint32_t)g->abilities << 8 | (uint32_t)g->title << 16 |
                (uint32_t)g->menu_sel << 24);
+    if (g->title_sel | g->stage | g->backdrop)  /* earlier replays keep their hashes */
+        h = mix(h, g->title_sel | (uint32_t)g->stage << 8 | (uint32_t)g->backdrop << 16);
     for (int t = 0; t < TEAM_COUNT; t++) {
         h = hash_player(h, &g->players[t]);
         h = mix(h, g->last_hit[t] | (uint32_t)g->respawn[t] << 8);

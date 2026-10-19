@@ -2,8 +2,8 @@
  * platform drawing interface, so both show the same pixels.
  *
  * Coordinates are sim/framebuffer pixels (0..VIEW_W, 0..VIEW_H = 640x240).
- * Every sheet is built 2x wide (tools/build_sprites.py), so blits are 1:1
- * and the N64 can use copy mode.
+ * Every sheet is built at sim resolution (tools/build_sprites.py), so blits
+ * are 1:1 and the N64 can use copy mode.
  */
 #ifndef SCENE_H
 #define SCENE_H
@@ -12,10 +12,19 @@
 
 #include "game.h"
 
-/* Sprite sheets, loaded by the platform by name (build/assets/{host,n64}). */
+/* Sprite sheets, loaded by the platform by name (build/assets/{host,n64}),
+ * scene_sheet_name. SPR_TILES comes once per tileset, SPR_SKY and
+ * SPR_SCENERY in one pair per backdrop: the platform reloads them when
+ * Game.lv.tileset or Game.backdrop changes. */
 enum { SPR_TILES, SPR_P1, SPR_P2, SPR_PAD, SPR_FLAG, SPR_SKY, SPR_SCENERY, SPR_HUD, SPR_FRUIT, SPR_FONT,
        SPR_SLASH, SPR_CONTROLS, SPR_COUNT };
-extern const char *const scene_sprite_names[SPR_COUNT];
+
+/* File name (no extension) of sheet spr; tileset (Level.tileset) applies
+ * to SPR_TILES only, backdrop (BACKDROP_*) to SPR_SKY and SPR_SCENERY. */
+void scene_sheet_name(int spr, int backdrop, int tileset, char *out, int size);
+
+/* Level.tileset, or 0 if out of range. */
+int scene_tileset(const Level *lv);
 
 enum { FLIP_X = 1, FLIP_Y = 2 };
 

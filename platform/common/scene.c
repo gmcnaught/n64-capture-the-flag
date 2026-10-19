@@ -3,23 +3,39 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "backdrops.h"
 #include "font_glyphs.h"
+#include "tilesets.h"
 
-const char *const scene_sprite_names[SPR_COUNT] = {
+static const char *const sprite_names[SPR_COUNT] = {
     "tiles", "p1", "p2", "jumppad", "flag", "sky", "scenery", "hud", "fruit", "font", "slash",
     "controls",
 };
 
+void scene_sheet_name(int spr, int backdrop, int tileset, char *out, int size)
+{
+    if (spr == SPR_TILES)
+        snprintf(out, (size_t)size, "%s", tileset_sheets[tileset]);
+    else if (spr == SPR_SKY || spr == SPR_SCENERY)
+        snprintf(out, (size_t)size, "%s_%s", sprite_names[spr], backdrop_names[backdrop]);
+    else
+        snprintf(out, (size_t)size, "%s", sprite_names[spr]);
+}
+
+int scene_tileset(const Level *lv)
+{
+    return lv->tileset < TILESET_COUNT ? lv->tileset : 0;
+}
+
 /* Sheet layouts, sim px (tools/build_sprites.py). */
-#define TILESET_COLS 17         /* assets/src/tilesets/arena.png: 17 cells per row */
 #define FLAG_SPR_W 32           /* 9 frames of 32x16; row 0 team 1, row 1 team 2, */
 #define FLAG_OUTLINE_ROW 2      /* row 2: dotted outline for empty goal stands */
 #define FLAG_SPR_H 16
 #define FLAG_FRAMES 9
 #define PAD_W 16                /* 4 frames of 16x16: rest, half, up, squashed */
 #define PAD_H 16
-#define SKY_W 640               /* "sky" sheet (tools/scenery.py); the "scenery" sheet */
-#define SKY_H 144               /* is the whole screen, 640 x 240 */
+#define SKY_W 640               /* "sky" sheets: 640 x backdrop_sky_h (tools/scenery.py); */
+                                /* "scenery" sheets are the whole screen, 640 x 240 */
 #define HEART_W 16              /* full, 3/4, 1/2, empty */
 #define HEART_H 8
 
@@ -41,18 +57,14 @@ static void outline(const DrawApi *d, int x, int y, int w, int h, uint32_t c)
 
 /* ---- backdrop ---------------------------------------------------------------- */
 
-/* Sky: a screen-wide picture drifting left 1 px every 4 frames, every
- * other copy mirrored so the edges always join (render only: it reads the
- * frame counter and never feeds back into the sim). The scenery below
- * covers the rest of the screen. */
+/* Sky: a screen-wide picture that tiles horizontally, drifting left 1 px
+ * every 4 frames (render only: it reads the frame counter and never feeds
+ * back into the sim). The scenery below covers the rest of the screen. */
 void scene_draw_sky(const Game *g, const DrawApi *d)
 {
-    int s = (int)(g->frame / 4 % (2 * SKY_W));
-    for (int k = 0; k < 3; k++) {
-        int x = k * SKY_W - s;
-        if (x < VIEW_W && x + SKY_W > 0)
-            d->blit(d->ctx, SPR_SKY, 0, 0, SKY_W, SKY_H, x, 0, (k & 1) ? FLIP_X : 0);
-    }
+    int s = (int)(g->frame / 4 % SKY_W), h = backdrop_sky_h[g->backdrop];
+    for (int x = -s; x < VIEW_W; x += SKY_W)
+        d->blit(d->ctx, SPR_SKY, 0, 0, SKY_W, h, x, 0, 0);
 }
 
 static void draw_backdrop(const DrawApi *d)
@@ -301,20 +313,55 @@ static void dim(const DrawApi *d)
     d->fill(d->ctx, 0, 0, VIEW_W, VIEW_H, 0x000000a8);
 }
 
+/* Title screen row: a small label right-aligned to x, the value from
+ * x + 16; the selected row is gold, with arrows that nudge outward if the
+ * value can change (choices > 1). */
+static void title_row(const Game *g, const DrawApi *d, int x, int y, const char *label,
+                      const char *value, int sel, int choices)
+{
+    int sw = font_width(label, FONT_SMALL), mh = font_h(FONT_MEDIUM);
+    font_text(g, d, x - sw, y + (mh - font_h(FONT_SMALL)) / 2, label, FONT_SMALL,
+              sel ? TINT_WHITE : TINT_DIM, 0);
+    int i = font_index('>'), cols = font_sizes[FONT_MEDIUM].cols, aw = font_advance(i, FONT_MEDIUM);
+    int vx = x + 16 + aw + 8, vw = font_width(value, FONT_MEDIUM);
+    font_text(g, d, vx, y, value, FONT_MEDIUM, sel ? TINT_GOLD : TINT_DIM, 0);
+    if (!sel || choices < 2)
+        return;
+    int nudge = ((g->frame >> 3) & 1) * 4;
+    for (int side = 0; side < 2; side++)    /* "<" is ">" mirrored */
+        d->blit_tint(d->ctx, SPR_FONT, i % cols * font_sizes[FONT_MEDIUM].cell_w,
+                     font_sizes[FONT_MEDIUM].y + i / cols * font_sizes[FONT_MEDIUM].cell_h, aw,
+                     font_sizes[FONT_MEDIUM].cell_h, side ? vx + vw + 8 + nudge : x + 16 - nudge, y,
+                     side ? 0 : FLIP_X, TINT_GOLD);
+}
+
 static void draw_title(const Game *g, const DrawApi *d)
 {
     dim(d);
     int lh = font_h(FONT_LARGE);
-    font_center(g, d, 48, "CAPTURE", FONT_LARGE, TINT_GOLD, 1);
-    font_center(g, d, 48 + lh + 6, "THE FLAG", FONT_LARGE, TINT_GOLD, 1);
+    font_center(g, d, 30, "CAPTURE", FONT_LARGE, TINT_GOLD, 1);
+    font_center(g, d, 30 + lh + 6, "THE FLAG", FONT_LARGE, TINT_GOLD, 1);
     /* RED VS BLUE in the team colors. */
     int w_red = font_width("RED ", FONT_MEDIUM), w_vs = font_width("VS ", FONT_MEDIUM);
-    int x = (VIEW_W - w_red - w_vs - font_width("BLUE", FONT_MEDIUM)) / 2, y = 128;
+    int x = (VIEW_W - w_red - w_vs - font_width("BLUE", FONT_MEDIUM)) / 2, y = 106;
     font_text(g, d, x, y, "RED ", FONT_MEDIUM, TEAM_TINT[0], 0);
     font_text(g, d, x + w_red, y, "VS ", FONT_MEDIUM, TINT_DIM, 0);
     font_text(g, d, x + w_red + w_vs, y, "BLUE", FONT_MEDIUM, TEAM_TINT[1], 0);
+    /* Stage: the level's name up to its extension, upper case. */
+    char stage[24], backdrop[16];
+    const char *n = g->lv.name ? g->lv.name : "ARENA";
+    int k = 0;
+    for (; n[k] && n[k] != '.' && k < (int)sizeof stage - 1; k++)
+        stage[k] = (char)(n[k] >= 'a' && n[k] <= 'z' ? n[k] - 'a' + 'A' : n[k]);
+    stage[k] = 0;
+    for (k = 0; backdrop_names[g->backdrop][k] && k < (int)sizeof backdrop - 1; k++)
+        backdrop[k] = (char)(backdrop_names[g->backdrop][k] - 'a' + 'A');
+    backdrop[k] = 0;
+    title_row(g, d, 250, 140, "STAGE", stage, g->title_sel == TITLE_STAGE, g->stage_count);
+    title_row(g, d, 250, 164, "BACKGROUND", backdrop, g->title_sel == TITLE_BACKDROP,
+              BACKDROP_COUNT);
     if ((g->frame / 30) & 1 || g->frame < 30)
-        font_center(g, d, 168, "PRESS START", FONT_MEDIUM, TINT_WHITE, 0);
+        font_center(g, d, 200, "PRESS START", FONT_MEDIUM, TINT_WHITE, 0);
 }
 
 static void draw_pause(const Game *g, const DrawApi *d)

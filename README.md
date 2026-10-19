@@ -36,7 +36,9 @@ Red against blue in one arena. Each team keeps three flags by its start.
   stream of water pours down the platforms, sweeping up anyone in its way.
 
 Every round starts with a 3, 2, 1, GO! countdown. Press Start to pause; the
-pause menu has a CONTROLS screen.
+pause menu has a CONTROLS screen. Pick the stage (Arena, Forest, Desert,
+Snow, Lava) and the background on the title screen with up/down and
+left/right.
 
 ## Controls
 
@@ -63,13 +65,18 @@ make check        # the same tests on the N64, in ares
 make deploy MISTER_HOSTS=<ip>   # copy the ROM to a MiSTer
 ```
 
-The forest backdrop comes from Bongseng's
+The backdrops (forest, desert, moon and sky, picked on the title screen)
+come from Bongseng's
 [Parallax (Forest, desert, sky, moon)](https://bongseng.itch.io/parallax-forest-desert-sky-moon),
 whose files can't be redistributed. Download it and unpack it into
-`new-assets/more-parallax/` to build with it; without it the game uses a
-mountain backdrop that is included.
+`new-assets/more-parallax/` to build with it; without it every backdrop
+is a mountain scene that is included.
 
-The level is edited in [LDtk](https://ldtk.io) (`assets/src/levels/arena.ldtk`).
+The stages are levels in one [LDtk](https://ldtk.io) project
+(`assets/src/levels/arena.ldtk`); each has its own layout, a Tileset field
+and a Backdrop field. The ground tiles are built from the Collision layer
+at import (`tools/terrain.py`: corners, edges and fill from each cell's
+neighbors), so LDtk's own tile layers only show in the editor.
 
 ## How it works
 

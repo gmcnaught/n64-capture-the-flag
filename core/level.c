@@ -24,7 +24,7 @@ int level_load(Level *lv, const uint8_t *data, uint32_t size)
     lv->weather = data[12];
     lv->music = data[13];
     lv->backdrop = data[14];
-    lv->flags = data[15];
+    lv->tileset = data[15];
     if (lv->cell_w == 0 || lv->cell_h == 0 || lv->cell_w > 1023 || lv->cell_h > 2047)
         return 2;
     lv->px_w = (int16_t)(lv->cell_w * TILE_W);

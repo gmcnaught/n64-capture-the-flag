@@ -38,6 +38,10 @@
  * RESPAWN_FRAMES. Hazards cost a pip and respawn at the last safe ground.
  * Screens: the title screen (game_title) waits for Start or Jump from
  * either player, then starts a match (rounds won and knockouts reset).
+ * On it, Up/Down pick a row and Left/Right change it: STAGE (the level,
+ * Game.stage; the platform sees the change, loads that level and calls
+ * game_set_level) and BACKGROUND (Game.backdrop, which a stage change
+ * resets to the level's). The pick holds for the match.
  * Either player's Start pauses and resumes; paused, Up/Down move the menu
  * cursor and Jump/Attack picks RESUME, CONTROLS (a controls screen; Start,
  * Jump or Attack goes back to the menu), RESTART (new match) or QUIT
@@ -82,6 +86,7 @@
 enum { FS_HOME, FS_CARRIED, FS_DROPPED, FS_PLACED };
 enum { MENU_RESUME, MENU_CONTROLS, MENU_RESTART, MENU_QUIT, MENU_COUNT };   /* pause menu items */
 enum { PAUSE_MENU = 1, PAUSE_CONTROLS };    /* Game.paused, when nonzero */
+enum { TITLE_STAGE, TITLE_BACKDROP, TITLE_ROWS };   /* title screen rows */
 
 typedef struct {
     Body body;                  /* position; falls while dropped */
@@ -138,6 +143,10 @@ typedef struct {
     uint8_t title;                  /* title screen: the sim waits for Start */
     uint8_t paused;                 /* 0, PAUSE_MENU or PAUSE_CONTROLS */
     uint8_t menu_sel;               /* pause menu cursor, MENU_* */
+    uint8_t title_sel;              /* title screen row, TITLE_* */
+    uint8_t stage, stage_count;     /* level picked (index in the platform's level list), of how many;
+                                       game_init sets 0 of 1, the platform sets both */
+    uint8_t backdrop;               /* BACKDROP_*: the level's, or the title screen's pick */
     /* Output for the platform, rewritten every tick (not hashed). */
     uint32_t sfx;               /* SFX_BIT()s raised this tick */
 } Game;
@@ -148,6 +157,11 @@ void game_init(Game *g, const Level *lv, const PlayerTuning *tuning, uint8_t abi
 
 /* Show the title screen; the next Start or Jump starts a match. */
 void game_title(Game *g);
+
+/* Switch to another level (lv as for game_init) after Game.stage changed,
+ * keeping the screen, the title screen's picks, the tuning and the frame
+ * counter; the backdrop becomes the level's. */
+void game_set_level(Game *g, const Level *lv);
 
 /* in[0] = P1, in[1] = P2. */
 void game_tick(Game *g, const InputState in[TEAM_COUNT]);

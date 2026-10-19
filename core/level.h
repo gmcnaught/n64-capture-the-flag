@@ -9,12 +9,14 @@
  *   char     magic[4] = "LVL2"
  *   u16      cell_w, cell_h             size in cells
  *   u16      layer_count, entity_count
- *   u8       weather, music, backdrop, flags   (render/audio ids)
+ *   u8       weather, music, backdrop, tileset (render/audio ids; backdrop: BACKDROP_*,
+ *                                       tileset: platform/common/tilesets.h)
  *   u8       cells[cell_w * cell_h]     collision values (CELL_*)
  *   (pad to an even offset)
  *   layer_count times:
  *     i16    parallax_x, parallax_y     Q8.8; unused (the camera is fixed)
- *     u16    tiles[cell_w * cell_h]     TILE_EMPTY or id | TILE_FLIP_*
+ *     u16    tiles[cell_w * cell_h]     TILE_EMPTY or id | TILE_FLIP_*: cell of the
+ *                                       tileset's sheet (tools/terrain.py)
  *   entity_count times (ENTITY_BYTES):
  *     u16    type                        ENT_*
  *     i16    x, y                        top-left, sim px
@@ -54,6 +56,10 @@ enum {
     ENT_FRUIT_SPOT = 8, /* where a water fruit can appear (core/game.h) */
 };
 
+/* Backdrops (sky and scenery sheet pairs, tools/scenery.py BACKDROPS order):
+ * the level's is the default, the title screen can pick another. */
+enum { BACKDROP_FOREST, BACKDROP_DESERT, BACKDROP_MOON, BACKDROP_SKY, BACKDROP_COUNT };
+
 #define TILE_EMPTY  0xffffu
 #define TILE_ID     0x0fffu
 #define TILE_FLIP_X 0x4000u
@@ -79,10 +85,11 @@ typedef struct Level {
     int16_t solid_x, solid_y, solid_w, solid_h;
     int16_t px_w, px_h;
     uint16_t layer_count, entity_count;
-    uint8_t weather, music, backdrop, flags;
+    uint8_t weather, music, backdrop, tileset;
     const uint8_t *cells;
     const uint8_t *layers;      /* first layer header */
     const uint8_t *entities;    /* first entity record */
+    const char *name;           /* shown on the title screen; set by the platform, or NULL */
 } Level;
 
 /* Returns 0 on success, nonzero if the data is malformed. Level keeps
