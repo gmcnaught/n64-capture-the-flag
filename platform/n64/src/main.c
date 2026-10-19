@@ -46,6 +46,8 @@ volatile uint32_t g_last_fb;        /* framebuffer of the last frame (ares_read.
 volatile uint32_t g_frame_us;       /* last loop time, us (16683 = 60 Hz) */
 volatile uint32_t g_frame_us_max;   /* worst loop time after the first 60 frames */
 volatile uint32_t g_busy_us_max;    /* replay test: worst CPU + RDP time per frame */
+volatile uint32_t g_busy_at;        /* where: replay index << 16 | game frame */
+static int autotest_replay;
 volatile uint32_t g_repeats;        /* vblanks that re-showed the same framebuffer while measuring */
 static volatile bool measuring;     /* count repeated frames (set during replays) */
 volatile uint32_t g_replays_run, g_replays_passed;
@@ -321,8 +323,10 @@ static void render(const char *status, bool wait)
     if (wait) {
         rdpq_detach_wait();
         uint32_t busy = TICKS_TO_US(TICKS_READ() - start);
-        if (busy > g_busy_us_max)
+        if (busy > g_busy_us_max) {
             g_busy_us_max = busy;
+            g_busy_at = (uint32_t)autotest_replay << 16 | (game.frame & 0xffff);
+        }
         display_show(disp);
     } else {
         rdpq_detach_show();
@@ -376,6 +380,7 @@ static void autotest(void)
         }
         load_level(li);
         replay_start(&r, &game, &level);
+        autotest_replay = i;
         for (size_t f = 0; f < r.count; f++) {
             tick(r.frames[f].in);
             sound_update(game.sfx, audio_music(&game));

@@ -32,6 +32,8 @@ int scene_tileset(const Level *lv)
 #define FLAG_OUTLINE_ROW 2      /* row 2: dotted outline for empty goal stands */
 #define FLAG_SPR_H 16
 #define FLAG_FRAMES 9
+#define FLAG_POLE_X 9           /* pole's right column in an unflipped flag frame */
+#define FLAG_CARRY_RISE 8       /* carried: frame top this far above the carrier's sprite */
 #define PAD_W 16                /* 4 frames of 16x16: rest, half, up, squashed */
 #define PAD_H 16
 #define SKY_W 640               /* "sky" sheets: 640 x backdrop_sky_h (tools/scenery.py); */
@@ -104,13 +106,22 @@ static void draw_goals(const Game *g, const DrawApi *d)
 
 /* ---- objects -------------------------------------------------------------- */
 
+/* A carried flag is held up: pole on the carrier's center line, base
+ * hidden behind them, cloth above their head. Render only: the sim keeps
+ * it on the carrier's back, where it drops. */
 static void draw_flag(const Game *g, const DrawApi *d, int i)
 {
     const Flag *f = &g->flags[i];
     int frame = (int)((g->frame / 6 + (uint32_t)i * 3) % FLAG_FRAMES);
     int flip = f->state == FS_CARRIED && g->players[f->holder].facing < 0 ? FLIP_X : 0;
+    int x = f->body.x + FLAG_W / 2 - FLAG_SPR_W / 2, y = f->body.y;
+    if (f->state == FS_CARRIED) {
+        const Body *b = &g->players[f->holder].body;
+        x = b->x + b->w / 2 - (flip ? FLAG_SPR_W - FLAG_POLE_X : FLAG_POLE_X);
+        y = b->y + b->h - PLAYER_SPRITE_FOOT - FLAG_CARRY_RISE;
+    }
     d->blit(d->ctx, SPR_FLAG, frame * FLAG_SPR_W, f->team * FLAG_SPR_H, FLAG_SPR_W, FLAG_SPR_H,
-            f->body.x + FLAG_W / 2 - FLAG_SPR_W / 2, f->body.y, flip);
+            x, y, flip);
 }
 
 /* Flags on the ground, at home and in goals; carried ones are drawn with

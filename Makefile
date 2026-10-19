@@ -39,7 +39,7 @@ check: host n64
 	$(MAKE) -C platform/n64 test
 	python3 tools/ares_read.py --seconds 180 platform/n64/ctf-test.z64 \
 	  platform/n64/build-test/ctf-test.elf g_autotest_done g_replays_run \
-	  g_replays_passed g_frame_us_max g_busy_us_max g_repeats | tee build-check.log
+	  g_replays_passed g_frame_us_max g_busy_us_max g_busy_at g_repeats | tee build-check.log
 	grep -q "g_autotest_done=0x600df00d" build-check.log
 	@run=$$(sed -n 's/g_replays_run=//p' build-check.log); \
 	 passed=$$(sed -n 's/g_replays_passed=//p' build-check.log); \
