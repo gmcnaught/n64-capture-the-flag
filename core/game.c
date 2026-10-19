@@ -84,6 +84,14 @@ static void read_entities(Game *g)
             if (g->pad_count < MAX_PADS)
                 g->pads[g->pad_count++] = (JumpPad){e.x, e.y, 0};
             break;
+        case ENT_WIND:
+            if (e.flag > e.x2 && e.x2 > 2 * WIND_RAMP && e.param && g->wind_count < MAX_WINDS) {
+                WindZone *z = &g->winds[g->wind_count++];
+                *z = (WindZone){e.x, e.y, (int16_t)e.w, (int16_t)e.h, (int32_t)e.param << 8,
+                                e.flag, (uint16_t)e.x2, (uint16_t)((uint16_t)e.y2 >> 2),
+                                (uint8_t)(e.y2 & 1), (uint8_t)((e.y2 >> 1) & 1), 0, 0};
+            }
+            break;
         }
     }
 }
@@ -127,6 +135,9 @@ static uint16_t fruit_interval(Game *g)
 
 static void new_round(Game *g)
 {
+    g->round_frame = 0;
+    for (int i = 0; i < g->wind_count; i++)
+        g->winds[i].force = 0;
     g->fruit_active = 0;
     g->fruit_timer = fruit_interval(g);
     g->water_len = 0;
@@ -142,6 +153,58 @@ static void new_round(Game *g)
     g->round_timer = 0;
     g->countdown = COUNTDOWN_FRAMES;
     g->sfx |= SFX_BIT(SFX_MENU);    /* "3" (game_tick clears sfx, so not on game_init) */
+}
+
+uint16_t game_zone_calm(const Game *g, const WindZone *z)
+{
+    uint32_t t = (g->round_frame + z->phase) % z->cycle, start = z->cycle - z->gust;
+    return (uint16_t)(t < start ? start - t : 0);
+}
+
+uint16_t game_wind_calm(const Game *g)
+{
+    uint16_t calm = 0xffff;
+    for (int i = 0; i < g->wind_count; i++) {
+        uint16_t c = game_zone_calm(g, &g->winds[i]);
+        if (c < calm)
+            calm = c;
+    }
+    return calm;
+}
+
+int32_t game_wind_at(const Game *g, const Body *b)
+{
+    int32_t f = 0;
+    for (int i = 0; i < g->wind_count; i++) {
+        const WindZone *z = &g->winds[i];
+        if (z->force && b->x < z->x + z->w && b->x + b->w > z->x && b->y < z->y + z->h &&
+            b->y + b->h > z->y)
+            f += z->force;
+    }
+    return f;
+}
+
+/* Each zone's gust for this frame (force, dir), and the warning sound. */
+static void update_wind(Game *g)
+{
+    for (int i = 0; i < g->wind_count; i++) {
+        WindZone *z = &g->winds[i];
+        uint32_t t = g->round_frame + z->phase;
+        uint32_t s = t % z->cycle - (z->cycle - z->gust);
+        uint16_t calm = game_zone_calm(g, z);
+        z->dir = (int8_t)((z->peak > 0) != (z->alternate && ((t / z->cycle) & 1)) ? 1 : -1);
+        if (calm == WIND_WARN)
+            g->sfx |= SFX_BIT(SFX_WIND);
+        if (calm) {
+            z->force = 0;
+            continue;
+        }
+        uint32_t k = s + 1 < z->gust - s ? s + 1 : z->gust - s;
+        if (k > WIND_RAMP)
+            k = WIND_RAMP;
+        int32_t peak = z->peak < 0 ? -z->peak : z->peak;
+        z->force = z->dir * (int32_t)((int64_t)peak * k / WIND_RAMP);
+    }
 }
 
 /* New match: rounds won and knockouts back to 0, no menu. */
@@ -252,6 +315,9 @@ static void update_flags(Game *g)
             b->x = (int16_t)(p->body.x + (p->body.w - FLAG_W) / 2 - p->facing * 8);
             b->y = (int16_t)(p->body.y - 6);
         } else if (f->state == FS_DROPPED) {
+            fx wind = game_wind_at(g, b);
+            if (wind)                       /* a gust blows it along */
+                body_move_x(b, wind, &g->lv);
             b->vy += g->tuning.gravity;
             if (b->vy > g->tuning.fall_max)
                 b->vy = g->tuning.fall_max;
@@ -698,6 +764,12 @@ void game_tick(Game *g, const InputState in[TEAM_COUNT])
     }
     if (g->countdown)
         g->countdown--;
+    if (g->wind_count) {
+        update_wind(g);
+        for (int t = 0; t < TEAM_COUNT; t++)
+            g->players[t].push_x = game_wind_at(g, &g->players[t].body);
+    }
+    g->round_frame++;
 
     uint8_t stacked_before[TEAM_COUNT];     /* the other player stood on t */
     for (int t = 0; t < TEAM_COUNT; t++)
@@ -819,6 +891,11 @@ uint32_t game_hash(const Game *g)
                (uint32_t)g->menu_sel << 24);
     if (g->title_sel | g->stage | g->backdrop)  /* earlier replays keep their hashes */
         h = mix(h, g->title_sel | (uint32_t)g->stage << 8 | (uint32_t)g->backdrop << 16);
+    if (g->wind_count) {
+        h = mix(h, g->round_frame);
+        for (int i = 0; i < g->wind_count; i++)
+            h = mix(h, (uint32_t)g->winds[i].force ^ (uint32_t)(uint8_t)g->winds[i].dir << 24);
+    }
     for (int t = 0; t < TEAM_COUNT; t++) {
         h = hash_player(h, &g->players[t]);
         h = mix(h, g->last_hit[t] | (uint32_t)g->respawn[t] << 8);

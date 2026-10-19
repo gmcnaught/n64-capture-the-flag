@@ -11,7 +11,7 @@
 	"iid": "073b6e92-03dd-4556-b498-4dce8a55dec2",
 	"jsonVersion": "1.5.3",
 	"appBuildId": 473703,
-	"nextUid": 57,
+	"nextUid": 64,
 	"identifierStyle": "Capitalize",
 	"toc": [],
 	"worldLayout": "Free",
@@ -1915,6 +1915,294 @@
 				"pivotX": 0.5,
 				"pivotY": 1,
 				"fieldDefs": []
+			},
+			{
+				"identifier": "Wind",
+				"uid": 57,
+				"tags": [],
+				"exportToToc": false,
+				"allowOutOfBounds": false,
+				"doc": "Wind gusts over this zone (core/game.h WIND_*)",
+				"width": 8,
+				"height": 8,
+				"resizableX": true,
+				"resizableY": true,
+				"minWidth": null,
+				"maxWidth": null,
+				"minHeight": null,
+				"maxHeight": null,
+				"keepAspectRatio": false,
+				"tileOpacity": 1,
+				"fillOpacity": 0.05,
+				"lineOpacity": 1,
+				"hollow": true,
+				"color": "#C8E6FF",
+				"renderMode": "Rectangle",
+				"showName": true,
+				"tilesetId": null,
+				"tileRenderMode": "FitInside",
+				"tileRect": null,
+				"uiTileRect": null,
+				"nineSliceBorders": [],
+				"maxCount": 4,
+				"limitScope": "PerLevel",
+				"limitBehavior": "MoveLastOne",
+				"pivotX": 0,
+				"pivotY": 0,
+				"fieldDefs": [
+					{
+						"identifier": "Force",
+						"doc": "Peak push, px/frame (as the tuning values: run_speed 2.7); the sign is the first gust's direction",
+						"__type": "Float",
+						"uid": 58,
+						"type": "F_Float",
+						"isArray": false,
+						"canBeNull": false,
+						"arrayMinLength": null,
+						"arrayMaxLength": null,
+						"editorDisplayMode": "NameAndValue",
+						"editorDisplayScale": 1,
+						"editorDisplayPos": "Above",
+						"editorLinkStyle": "StraightArrow",
+						"editorDisplayColor": null,
+						"editorAlwaysShow": false,
+						"editorShowInWorld": true,
+						"editorCutLongValues": true,
+						"editorTextSuffix": null,
+						"editorTextPrefix": null,
+						"useForSmartColor": false,
+						"exportToToc": false,
+						"searchable": false,
+						"min": null,
+						"max": null,
+						"regex": null,
+						"acceptFileTypes": null,
+						"defaultOverride": {
+							"id": "V_Float",
+							"params": [
+								0.75
+							]
+						},
+						"textLanguageMode": null,
+						"symmetricalRef": false,
+						"autoChainRef": true,
+						"allowOutOfLevelRef": true,
+						"allowedRefs": "Any",
+						"allowedRefsEntityUid": null,
+						"allowedRefTags": [],
+						"tilesetUid": null
+					},
+					{
+						"identifier": "Cycle",
+						"doc": "Frames from one gust to the next",
+						"__type": "Int",
+						"uid": 59,
+						"type": "F_Int",
+						"isArray": false,
+						"canBeNull": false,
+						"arrayMinLength": null,
+						"arrayMaxLength": null,
+						"editorDisplayMode": "NameAndValue",
+						"editorDisplayScale": 1,
+						"editorDisplayPos": "Above",
+						"editorLinkStyle": "StraightArrow",
+						"editorDisplayColor": null,
+						"editorAlwaysShow": false,
+						"editorShowInWorld": true,
+						"editorCutLongValues": true,
+						"editorTextSuffix": null,
+						"editorTextPrefix": null,
+						"useForSmartColor": false,
+						"exportToToc": false,
+						"searchable": false,
+						"min": null,
+						"max": null,
+						"regex": null,
+						"acceptFileTypes": null,
+						"defaultOverride": {
+							"id": "V_Int",
+							"params": [
+								480
+							]
+						},
+						"textLanguageMode": null,
+						"symmetricalRef": false,
+						"autoChainRef": true,
+						"allowOutOfLevelRef": true,
+						"allowedRefs": "Any",
+						"allowedRefsEntityUid": null,
+						"allowedRefTags": [],
+						"tilesetUid": null
+					},
+					{
+						"identifier": "Gust",
+						"doc": "Frames a gust blows, ramps included",
+						"__type": "Int",
+						"uid": 60,
+						"type": "F_Int",
+						"isArray": false,
+						"canBeNull": false,
+						"arrayMinLength": null,
+						"arrayMaxLength": null,
+						"editorDisplayMode": "NameAndValue",
+						"editorDisplayScale": 1,
+						"editorDisplayPos": "Above",
+						"editorLinkStyle": "StraightArrow",
+						"editorDisplayColor": null,
+						"editorAlwaysShow": false,
+						"editorShowInWorld": true,
+						"editorCutLongValues": true,
+						"editorTextSuffix": null,
+						"editorTextPrefix": null,
+						"useForSmartColor": false,
+						"exportToToc": false,
+						"searchable": false,
+						"min": null,
+						"max": null,
+						"regex": null,
+						"acceptFileTypes": null,
+						"defaultOverride": {
+							"id": "V_Int",
+							"params": [
+								150
+							]
+						},
+						"textLanguageMode": null,
+						"symmetricalRef": false,
+						"autoChainRef": true,
+						"allowOutOfLevelRef": true,
+						"allowedRefs": "Any",
+						"allowedRefsEntityUid": null,
+						"allowedRefTags": [],
+						"tilesetUid": null
+					},
+					{
+						"identifier": "Alternate",
+						"doc": "Each gust blows the other way",
+						"__type": "Bool",
+						"uid": 61,
+						"type": "F_Bool",
+						"isArray": false,
+						"canBeNull": false,
+						"arrayMinLength": null,
+						"arrayMaxLength": null,
+						"editorDisplayMode": "NameAndValue",
+						"editorDisplayScale": 1,
+						"editorDisplayPos": "Above",
+						"editorLinkStyle": "StraightArrow",
+						"editorDisplayColor": null,
+						"editorAlwaysShow": false,
+						"editorShowInWorld": true,
+						"editorCutLongValues": true,
+						"editorTextSuffix": null,
+						"editorTextPrefix": null,
+						"useForSmartColor": false,
+						"exportToToc": false,
+						"searchable": false,
+						"min": null,
+						"max": null,
+						"regex": null,
+						"acceptFileTypes": null,
+						"defaultOverride": {
+							"id": "V_Bool",
+							"params": [
+								true
+							]
+						},
+						"textLanguageMode": null,
+						"symmetricalRef": false,
+						"autoChainRef": true,
+						"allowOutOfLevelRef": true,
+						"allowedRefs": "Any",
+						"allowedRefsEntityUid": null,
+						"allowedRefTags": [],
+						"tilesetUid": null
+					},
+					{
+						"identifier": "Phase",
+						"doc": "Frames this zone's cycle runs ahead (0-8191)",
+						"__type": "Int",
+						"uid": 62,
+						"type": "F_Int",
+						"isArray": false,
+						"canBeNull": false,
+						"arrayMinLength": null,
+						"arrayMaxLength": null,
+						"editorDisplayMode": "NameAndValue",
+						"editorDisplayScale": 1,
+						"editorDisplayPos": "Above",
+						"editorLinkStyle": "StraightArrow",
+						"editorDisplayColor": null,
+						"editorAlwaysShow": false,
+						"editorShowInWorld": true,
+						"editorCutLongValues": true,
+						"editorTextSuffix": null,
+						"editorTextPrefix": null,
+						"useForSmartColor": false,
+						"exportToToc": false,
+						"searchable": false,
+						"min": null,
+						"max": null,
+						"regex": null,
+						"acceptFileTypes": null,
+						"defaultOverride": {
+							"id": "V_Int",
+							"params": [
+								0
+							]
+						},
+						"textLanguageMode": null,
+						"symmetricalRef": false,
+						"autoChainRef": true,
+						"allowOutOfLevelRef": true,
+						"allowedRefs": "Any",
+						"allowedRefsEntityUid": null,
+						"allowedRefTags": [],
+						"tilesetUid": null
+					},
+					{
+						"identifier": "Dust",
+						"doc": "Drawn as a dust storm (else wind streaks)",
+						"__type": "Bool",
+						"uid": 63,
+						"type": "F_Bool",
+						"isArray": false,
+						"canBeNull": false,
+						"arrayMinLength": null,
+						"arrayMaxLength": null,
+						"editorDisplayMode": "NameAndValue",
+						"editorDisplayScale": 1,
+						"editorDisplayPos": "Above",
+						"editorLinkStyle": "StraightArrow",
+						"editorDisplayColor": null,
+						"editorAlwaysShow": false,
+						"editorShowInWorld": true,
+						"editorCutLongValues": true,
+						"editorTextSuffix": null,
+						"editorTextPrefix": null,
+						"useForSmartColor": false,
+						"exportToToc": false,
+						"searchable": false,
+						"min": null,
+						"max": null,
+						"regex": null,
+						"acceptFileTypes": null,
+						"defaultOverride": {
+							"id": "V_Bool",
+							"params": [
+								false
+							]
+						},
+						"textLanguageMode": null,
+						"symmetricalRef": false,
+						"autoChainRef": true,
+						"allowOutOfLevelRef": true,
+						"allowedRefs": "Any",
+						"allowedRefsEntityUid": null,
+						"allowedRefTags": [],
+						"tilesetUid": null
+					}
+				]
 			}
 		],
 		"tilesets": [
@@ -20105,6 +20393,238 @@
 							"fieldInstances": [],
 							"__worldX": 940,
 							"__worldY": 216
+						},
+						{
+							"__identifier": "Wind",
+							"__grid": [
+								3,
+								10
+							],
+							"__pivot": [
+								0,
+								0
+							],
+							"__tags": [],
+							"__tile": null,
+							"__smartColor": "#C8E6FF",
+							"iid": "58118bf9-ba50-41e4-a2dc-f07f9578d0d4",
+							"width": 56,
+							"height": 40,
+							"defUid": 57,
+							"px": [
+								24,
+								80
+							],
+							"fieldInstances": [
+								{
+									"__identifier": "Force",
+									"__type": "Float",
+									"__value": -1.0,
+									"__tile": null,
+									"defUid": 58,
+									"realEditorValues": [
+										{
+											"id": "V_Float",
+											"params": [
+												-1.0
+											]
+										}
+									]
+								},
+								{
+									"__identifier": "Cycle",
+									"__type": "Int",
+									"__value": 420,
+									"__tile": null,
+									"defUid": 59,
+									"realEditorValues": [
+										{
+											"id": "V_Int",
+											"params": [
+												420
+											]
+										}
+									]
+								},
+								{
+									"__identifier": "Gust",
+									"__type": "Int",
+									"__value": 120,
+									"__tile": null,
+									"defUid": 60,
+									"realEditorValues": [
+										{
+											"id": "V_Int",
+											"params": [
+												120
+											]
+										}
+									]
+								},
+								{
+									"__identifier": "Alternate",
+									"__type": "Bool",
+									"__value": false,
+									"__tile": null,
+									"defUid": 61,
+									"realEditorValues": [
+										{
+											"id": "V_Bool",
+											"params": [
+												false
+											]
+										}
+									]
+								},
+								{
+									"__identifier": "Phase",
+									"__type": "Int",
+									"__value": 0,
+									"__tile": null,
+									"defUid": 62,
+									"realEditorValues": [
+										{
+											"id": "V_Int",
+											"params": [
+												0
+											]
+										}
+									]
+								},
+								{
+									"__identifier": "Dust",
+									"__type": "Bool",
+									"__value": true,
+									"__tile": null,
+									"defUid": 63,
+									"realEditorValues": [
+										{
+											"id": "V_Bool",
+											"params": [
+												true
+											]
+										}
+									]
+								}
+							],
+							"__worldX": 792,
+							"__worldY": 80
+						},
+						{
+							"__identifier": "Wind",
+							"__grid": [
+								30,
+								10
+							],
+							"__pivot": [
+								0,
+								0
+							],
+							"__tags": [],
+							"__tile": null,
+							"__smartColor": "#C8E6FF",
+							"iid": "aa3f8d45-1b80-4531-97f9-2d954bd4e235",
+							"width": 56,
+							"height": 40,
+							"defUid": 57,
+							"px": [
+								240,
+								80
+							],
+							"fieldInstances": [
+								{
+									"__identifier": "Force",
+									"__type": "Float",
+									"__value": 1.0,
+									"__tile": null,
+									"defUid": 58,
+									"realEditorValues": [
+										{
+											"id": "V_Float",
+											"params": [
+												1.0
+											]
+										}
+									]
+								},
+								{
+									"__identifier": "Cycle",
+									"__type": "Int",
+									"__value": 420,
+									"__tile": null,
+									"defUid": 59,
+									"realEditorValues": [
+										{
+											"id": "V_Int",
+											"params": [
+												420
+											]
+										}
+									]
+								},
+								{
+									"__identifier": "Gust",
+									"__type": "Int",
+									"__value": 120,
+									"__tile": null,
+									"defUid": 60,
+									"realEditorValues": [
+										{
+											"id": "V_Int",
+											"params": [
+												120
+											]
+										}
+									]
+								},
+								{
+									"__identifier": "Alternate",
+									"__type": "Bool",
+									"__value": false,
+									"__tile": null,
+									"defUid": 61,
+									"realEditorValues": [
+										{
+											"id": "V_Bool",
+											"params": [
+												false
+											]
+										}
+									]
+								},
+								{
+									"__identifier": "Phase",
+									"__type": "Int",
+									"__value": 0,
+									"__tile": null,
+									"defUid": 62,
+									"realEditorValues": [
+										{
+											"id": "V_Int",
+											"params": [
+												0
+											]
+										}
+									]
+								},
+								{
+									"__identifier": "Dust",
+									"__type": "Bool",
+									"__value": true,
+									"__tile": null,
+									"defUid": 63,
+									"realEditorValues": [
+										{
+											"id": "V_Bool",
+											"params": [
+												true
+											]
+										}
+									]
+								}
+							],
+							"__worldX": 1008,
+							"__worldY": 80
 						}
 					]
 				},

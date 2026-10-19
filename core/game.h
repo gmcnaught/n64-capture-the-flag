@@ -76,6 +76,24 @@
 #define COUNTDOWN_GO 40         /* frames GO! shows, in play */
 #define COUNTDOWN_FRAMES (3 * COUNTDOWN_STEP + COUNTDOWN_GO)
 #define MAX_FRUIT_SPOTS 8
+/* Wind (ENT_WIND zones): each cycle of a zone's `cycle` frames, counted
+ * from the end of the round countdown plus its phase, is calm, then
+ * WIND_WARN frames of warning (render and sound only), then a gust of
+ * `gust` frames ramping up and down over WIND_RAMP frames. Bodies in the
+ * zone are pushed by its force. */
+#define WIND_WARN 60
+#define WIND_RAMP 20
+#define MAX_WINDS 4
+
+typedef struct {
+    int16_t x, y, w, h;
+    int32_t peak;                   /* fx px/frame, sign = first gust direction */
+    uint16_t cycle, gust, phase;
+    uint8_t alternate;              /* each gust the other way */
+    uint8_t dust;                   /* drawn as a dust storm (else streaks; render only) */
+    int32_t force;                  /* fx px/frame pushing right (negative: left) this frame */
+    int8_t dir;                     /* direction of the current or next gust: 1 right, -1 left */
+} WindZone;
 #define FRUIT_LIFE 600          /* an untouched fruit disappears after 10 s */
 #define WATER_LEN 12            /* stream length, cells */
 #define WATER_STEP 3            /* frames per cell the front moves */
@@ -150,6 +168,10 @@ typedef struct {
     uint8_t stage, stage_count;     /* level picked (index in the platform's level list), of how many;
                                        game_init sets 0 of 1, the platform sets both */
     uint8_t backdrop;               /* BACKDROP_*: the level's, or the title screen's pick */
+    /* Wind gusts (ENT_WIND); hashed only when the level has wind. */
+    WindZone winds[MAX_WINDS];
+    uint8_t wind_count;
+    uint32_t round_frame;           /* frames of play this round (after the countdown) */
     /* Output for the platform, rewritten every tick (not hashed). */
     uint32_t sfx;               /* SFX_BIT()s raised this tick */
 } Game;
@@ -168,6 +190,14 @@ void game_set_level(Game *g, const Level *lv);
 
 /* in[0] = P1, in[1] = P2. */
 void game_tick(Game *g, const InputState in[TEAM_COUNT]);
+
+/* Frames until zone z's next gust starts: 0 while one blows. During the
+ * last WIND_WARN frames the gust is signaled. */
+uint16_t game_zone_calm(const Game *g, const WindZone *z);
+/* The least of game_zone_calm over all zones; 0xffff without wind. */
+uint16_t game_wind_calm(const Game *g);
+/* Sum of the forces of the zones a body is in (fx px/frame). */
+int32_t game_wind_at(const Game *g, const Body *b);
 
 /* Hash of all simulation state, for replay tests. */
 uint32_t game_hash(const Game *g);

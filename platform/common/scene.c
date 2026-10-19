@@ -144,6 +144,105 @@ static void draw_flags(const Game *g, const DrawApi *d)
             draw_flag(g, d, i);
 }
 
+/* Wind (render only: reads Game.anim and the zones' gust state).
+ * Streaks: white lines across the zone in the gust's direction, as many
+ * as the gust is strong, a few during the warning before it; each runs at
+ * its own speed and takes a new height each time it crosses.
+ * Dust storm: a sand haze always marks the zone; motes drift in it, more
+ * and faster during the warning, and blow across it in the gust. */
+#define WIND_STREAKS 28
+#define WIND_STREAK_MAX 48      /* longest streak, px */
+#define DUST_MOTES 30
+
+static uint32_t hash32(uint32_t x)
+{
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    return x ^ (x >> 16);
+}
+
+/* Gust strength 0..256 (warning: up to 64), and frames into the gust. */
+static int zone_strength(const Game *g, const WindZone *z, int *into)
+{
+    int calm = game_zone_calm(g, z);
+    *into = (int)((g->round_frame + z->phase) % z->cycle) - (z->cycle - z->gust);
+    if (calm > WIND_WARN)
+        return 0;
+    if (calm)
+        return 64 * (WIND_WARN - calm) / WIND_WARN;
+    int32_t peak = z->peak < 0 ? -z->peak : z->peak, force = z->force < 0 ? -z->force : z->force;
+    return (int)((int64_t)256 * force / peak);
+}
+
+static void draw_streaks(const Game *g, const DrawApi *d, const WindZone *z)
+{
+    int into, st = zone_strength(g, z, &into);
+    if (!st)
+        return;
+    int n = into >= 0 ? 1 + (WIND_STREAKS - 1) * st / 256 : 2 + 4 * st / 64;
+    uint32_t span = (uint32_t)z->w + WIND_STREAK_MAX;
+    for (int i = 0; i < n; i++) {
+        uint32_t h = hash32((uint32_t)i * 0x9e3779b9u + 1);
+        int len = 16 + (int)(h >> 8) % (WIND_STREAK_MAX - 16);
+        uint32_t travel = (h >> 16) % span + g->anim * (5 + h % 4);
+        int pos = (int)(travel % span);
+        int x = z->dir > 0 ? z->x - len + pos : z->x + z->w - pos;
+        int y = z->y + (int)(hash32(h + travel / span) % (uint32_t)z->h);
+        d->fill(d->ctx, x, y, len, 1, (i & 1) ? 0xffffff90u : 0xfff4dcb0u);
+    }
+}
+
+static int isqrt(int v)
+{
+    int r = 0;
+    while ((r + 1) * (r + 1) <= v)
+        r++;
+    return r;
+}
+
+static void draw_dust(const Game *g, const DrawApi *d, const WindZone *z)
+{
+    static const int8_t bob[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+    int into, st = zone_strength(g, z, &into);
+    /* Haze: 4 px bands, as wide as an ellipse filling the zone, edges
+     * wavering; thicker as the gust builds. */
+    uint32_t alpha = (uint32_t)(0x28 + 0x40 * st / 256);
+    int bands = z->h / 4;
+    for (int j = 0; j < bands; j++) {
+        int u = (2 * j + 1) * 256 / bands - 256;
+        int half = z->w / 2 * isqrt(65536 - u * u) / 256 + bob[(g->anim / 8 + j * 3) & 7] * 2;
+        d->fill(d->ctx, z->x + z->w / 2 - half, z->y + j * 4, 2 * half, 4, 0xe0a86000u | alpha);
+    }
+    int n = 10 + (DUST_MOTES - 10) * st / 256;
+    for (int i = 0; i < n; i++) {
+        uint32_t h = hash32((uint32_t)i * 0x9e3779b9u + 7);
+        /* slow drift, plus the distance blown since the gust began */
+        uint32_t travel = (h >> 16) % (uint32_t)z->w + g->anim * (1 + h % 2) / 3 +
+                          (into > 0 ? (uint32_t)into * (3 + h % 4) : 0);
+        int pos = (int)(travel % (uint32_t)z->w), w = 3 + (int)(h >> 4) % 4;
+        int x = z->dir > 0 ? z->x + pos : z->x + z->w - 1 - pos;
+        int y = z->y + 2 + (int)(hash32(h + travel / (uint32_t)z->w) % (uint32_t)(z->h - 4)) +
+                bob[(g->anim / 6 + i) & 7];
+        if (x + w > z->x + z->w)
+            w = z->x + z->w - x;
+        d->fill(d->ctx, x, y, w, 1, (i & 1) ? 0xf8e0b0ffu : 0xd8a060ffu);
+    }
+}
+
+static void draw_wind(const Game *g, const DrawApi *d)
+{
+    if (g->title)
+        return;
+    for (int i = 0; i < g->wind_count; i++) {
+        if (g->winds[i].dust)
+            draw_dust(g, d, &g->winds[i]);
+        else
+            draw_streaks(g, d, &g->winds[i]);
+    }
+}
+
 static void draw_pads(const Game *g, const DrawApi *d)
 {
     static const uint8_t seq[] = {3, 2, 2, 1, 0};
@@ -555,6 +654,7 @@ void scene_draw(const Game *g, const DrawApi *d, int debug)
     draw_slash(g, d, 1);
     draw_slash(g, d, 0);
     draw_water(g, d);
+    draw_wind(g, d);
     if (debug)
         draw_debug(g, d);
     if (g->title) {

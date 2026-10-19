@@ -48,6 +48,16 @@ Every scenario first waits out the round countdown (3, 2, 1, GO!).
   snow_capture  capture on the Snow stage (ice floor by the flags, ice
                 slabs): each team can still win.
   snow_capture_blue  capture_blue on the Snow stage.
+  wind_gust     Desert stage (a dust storm over each row 14 platform,
+                blowing outward). P1 stands on the left platform, P2 on the
+                right one: the gust blows each off its outer end.
+  wind_drop     Desert stage. P2 takes a red flag and stands on the left
+                storm platform; P1 stands right of it and kicks it just
+                before the gust, then walks right: the dropped flag is
+                blown left at least 20 px.
+  desert_capture  capture on the Desert stage: routes are followed between
+                gusts (route, wait_out_gust), so each team can win there.
+  desert_capture_blue  capture_blue on the Desert stage.
 """
 import re
 import os
@@ -106,17 +116,52 @@ def find_route(b, side, target):
     return [line.split() for line in out if line]
 
 
+def move_frames(s, side, tx):
+    """Generous estimate of a route move's frames (walk to tx, jump, settle)."""
+    p = s.p[side]
+    return abs(tx - p.x) * 10 // (17 if p.flag >= 0 else 27) + 120
+
+
+def wait_out_gust(b, side, hit):
+    """Stand through the next gust (it may push the player anywhere) and
+    come to rest after it; the state if hit(state) on the way, else None."""
+    s = b.hold(inp(side, ""), until=lambda s: s.p[side].calm == 0 or hit(s), limit=2000)
+    if not hit(s):
+        s = b.hold(inp(side, ""), until=lambda s: s.p[side].calm > 0 or hit(s), limit=2000)
+    if hit(s):
+        return s
+    at_rest(b, side)
+    return None
+
+
 def route(b, side, target, done=None):
     """Follow the route finder's route for one player from rest to target
     (see tools/routefind.c for the moves). done(state): the target reached
-    in the game (a pickup, a placement), checked on every frame."""
-    at_rest(b, side)
+    in the game (a pickup, a placement), checked on every frame. With wind
+    (routefind leaves it out), each move starts only with enough calm
+    left for it; otherwise the player waits out the gust and the route is
+    found again from where it left the player."""
+    while True:
+        s = route_calm(b, side, target, done)
+        if s is None and done:
+            s = wait_out_gust(b, side, done)
+        elif s is None:
+            wait_out_gust(b, side, lambda s: False)
+        if s is not None:
+            return s
+
+
+def route_calm(b, side, target, done):
+    """route, up to the first move that would meet a gust (None then)."""
+    s = at_rest(b, side)
     moves = find_route(b, side, target)
     if moves is None:
         raise RuntimeError(f"no route for P{side + 1} to {target}: {b.state()}")
     hit = done or (lambda s: False)
     for i, (d, tx, kind, air, ex, ey) in enumerate(moves):
         tx, ex, ey = int(tx), int(ex), int(ey)
+        if s.p[side].calm < move_frames(s, side, tx):
+            return None
         b.hold(inp(side, ""), 1)
         if d == "L":
             s = b.hold(inp(side, d), until=lambda s: s.p[side].x <= tx or hit(s), limit=400)
@@ -150,6 +195,56 @@ def route(b, side, target, done=None):
         check((p.x, p.y) == (ex, ey), f"P{side + 1} off route at move {i + 1} {moves[i]}", s)
     check(done is None, f"P{side + 1} reached the end of the route without {target}", s)
     return s
+
+
+def desert_capture():
+    return capture_team(0, "desert.lvl")
+
+
+def desert_capture_blue():
+    return capture_team(1, "desert.lvl")
+
+
+# Desert storm platforms (row 14 slabs), where a player stands on them.
+LEFT_SLAB, RIGHT_SLAB, SLAB_Y = (64, 136), (480, 552), 96
+
+
+def wind_gust():
+    b = Builder(NO_FRUIT.replace("arena.lvl", "desert.lvl"))
+    countdown(b)
+    b.hold("C / C", 10)
+    route(b, 0, f"rest:88,112,{SLAB_Y}")
+    route(b, 1, f"rest:504,528,{SLAB_Y}")
+    s = b.hold("C / C", until=lambda s: s.p[0].calm == 0, limit=600)
+    x = [s.p[0].x, s.p[1].x]
+    s = b.hold("C / C", until=lambda s: s.p[0].calm > 0, limit=600)
+    check(x[0] - s.p[0].x >= 40 or s.p[0].y > SLAB_Y, "P1 not blown left off its platform", s)
+    check(s.p[1].x - x[1] >= 40 or s.p[1].y > SLAB_Y, "P2 not blown right off its platform", s)
+    b.hold("C / C", 30)
+    return b
+
+
+def wind_drop():
+    b = Builder(NO_FRUIT.replace("arena.lvl", "desert.lvl"))
+    countdown(b)
+    b.hold("C / C", 10)
+    s = route(b, 1, f"flag:{FLAGS[0][0]}", done=lambda s: s.p[1].flag >= 0)
+    check(s.p[1].flag in FLAGS[0], "P2 took no red flag", s)
+    wait_out_gust(b, 1, lambda s: False)                    # a whole calm for the setup
+    route(b, 1, f"rest:72,88,{SLAB_Y}")                     # carrier on the left storm platform
+    s = route(b, 0, f"rest:112,128,{SLAB_Y}")               # P1 right of it
+    check(s.p[0].calm > 20 and s.p[1].y == SLAB_Y, "setup ran into the gust", s)
+    b.hold("C / C", until=lambda s: s.p[0].calm == 20, limit=600)
+    b.hold(inp(0, "L"), until=lambda s: s.p[0].x - s.p[1].x <= 34, limit=60)
+    b.hold("AC / C", 2)                                     # P1 kicks the carrier
+    s = b.hold("C / C", until=lambda s: s.p[1].flag < 0, limit=20)
+    check(s.p[0].dfx >= 0, "no flag dropped", s)
+    s = b.hold("C / C", until=lambda s: s.p[0].calm == 0 and s.p[0].dfx >= 0, limit=60)
+    x = s.p[0].dfx
+    s = b.hold(inp(0, "R"), until=lambda s: s.p[0].calm > 0, limit=300)   # P1 keeps off it
+    check(s.p[0].dfx >= 0 and x - s.p[0].dfx >= 20, "dropped flag not blown left", s)
+    b.hold("C / C", 30)
+    return b
 
 
 def capture_team(side, level="arena.lvl"):
@@ -391,7 +486,8 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     docs = __doc__.split("\n  ")
     scenarios = (capture, capture_blue, steal_drop, duel, stack, water, menu, ice_slide,
-                 snow_capture, snow_capture_blue)
+                 snow_capture, snow_capture_blue, wind_gust, wind_drop, desert_capture,
+                 desert_capture_blue)
     names = sys.argv[1:]
     for fn in scenarios:
         if names and fn.__name__ not in names:

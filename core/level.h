@@ -24,7 +24,7 @@
  *     u16    w, h                        sim px
  *     i16    x2, y2                      path end, top-left sim px (= x, y if none)
  *     i16    param                       type-specific
- *     u16    flag                        unused (FLAG_NONE)
+ *     u16    flag                        type-specific (FLAG_NONE if unused)
  *
  * The core reads only cells and entities; renderers read tile layers.
  */
@@ -55,6 +55,10 @@ enum {
     ENT_GOAL1    = 6,   /* w x h zone where team 1 places team 2's flags */
     ENT_GOAL2    = 7,
     ENT_FRUIT_SPOT = 8, /* where a water fruit can appear (core/game.h) */
+    ENT_WIND     = 9,   /* w x h zone of wind gusts (core/game.h WindZone): param peak
+                         * force (Q8.8 px/frame, sign = first direction), flag cycle
+                         * length and x2 gust length (frames), y2 bit 0 direction
+                         * alternates, bit 1 drawn as dust, bits 2-14 phase (frames) */
 };
 
 /* Surfaces: what a solid or one-way cell's top is made of. */

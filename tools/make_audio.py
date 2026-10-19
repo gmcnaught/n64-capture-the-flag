@@ -89,6 +89,8 @@ SFX = {
     "shield": lambda: mix(noise(0.2, 0.35, 0.0, 0.4), sweep(1400, 700, 0.2, wave_fn=None, vol=0.25)),
     "menu": lambda: sweep(1000, 1000, 0.04, vol=0.3),
     "room": lambda: noise(0.2, 0.25, 0.9, 0.98),
+    # A gust coming: low noise swelling in over the WIND_WARN second.
+    "wind": lambda: [v * min(1.0, i / (0.6 * RATE)) for i, v in enumerate(noise(1.2, 0.4, 0.97, 0.99))],
 }
 
 

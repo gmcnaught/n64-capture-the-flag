@@ -11,7 +11,8 @@
  *           goal1 | goal2 (touch the goal zone of team 1/2),
  *           flag:I (touch flag I at home; Game.flags order),
  *           rest:X0,X1,Y (come to rest with X0 <= x <= X1 at y = Y)
- * A carrier moves at tuning.carry_speed. The other player is a fixed solid
+ * A carrier moves at tuning.carry_speed. Wind is left out (routes are
+ * followed between gusts). The other player is a fixed solid
  * box where it stands at the end of the replay (it must keep still while
  * the route is followed), as the game makes it solid to the moving one.
  *
@@ -193,6 +194,7 @@ int main(int argc, char **argv)
 
     static const int ks[] = {3, 8, 12, 16, 20, 24, 28, 31, 34};
     nodes[0].p = g.players[side];
+    nodes[0].p.push_x = 0;      /* no wind: make_replays.py follows routes in calm */
     nodes[0].parent = -1;
     nodes[0].move[0] = 0;
     nnodes = 1;

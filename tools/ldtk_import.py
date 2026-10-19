@@ -21,7 +21,11 @@ Level rules (errors stop the import):
   - optional IntGrid layer "Surface" (1 = ice), only on solid and one-way
     cells: the high nibble of each cell (core/level.h SURFACE_*);
   - entities: see ENTITY_TYPES (at most one start and goal per team, up
-    to MAX_FLAGS flags per team; goals are resizable zones);
+    to MAX_FLAGS flags per team; goals are resizable zones; up to
+    MAX_WINDS Wind zones, fields Force (px/frame, as the tuning values),
+    Cycle and Gust (frames, Cycle > Gust + WIND_WARN, Gust > 2 *
+    WIND_RAMP), Phase (frames, < 8192), Alternate and Dust: core/level.h
+    ENT_WIND);
   - optional level fields: Music (Int), Backdrop (String, a
     tools/scenery.py BACKDROPS name, default forest), Tileset (String, a
     tools/terrain.py TILESETS name, default arena).
@@ -38,8 +42,9 @@ import terrain
 GRID = 8
 XS = 2                                  # sim px per art px, horizontally
 ENTITY_TYPES = {"P1Start": 1, "P2Start": 2, "JumpPad": 3, "Flag1": 4, "Flag2": 5, "Goal1": 6,
-                "Goal2": 7, "FruitSpot": 8}
+                "Goal2": 7, "FruitSpot": 8, "Wind": 9}
 UNIQUE = {"P1Start", "P2Start", "Goal1", "Goal2"}
+WIND_WARN, WIND_RAMP, MAX_WINDS = 60, 20, 4     # core/game.h
 MAX_FLAGS = 3                           # per team (core/game.h FLAGS_PER_TEAM)
 TILE_EMPTY = 0xFFFF
 FLAG_NONE = 0xFFFF
@@ -102,7 +107,23 @@ def convert(level):
                 seen.add(ident)
             x = e["px"][0] + li["__pxTotalOffsetX"] - round(e["width"] * e["__pivot"][0])
             y = e["px"][1] + li["__pxTotalOffsetY"] - round(e["height"] * e["__pivot"][1])
-            entities.append((kind, x * XS, y, e["width"] * XS, e["height"], x * XS, y, 0, FLAG_NONE))
+            rec = (kind, x * XS, y, e["width"] * XS, e["height"], x * XS, y, 0, FLAG_NONE)
+            if ident == "Wind":
+                ef = fields(e)
+                force, cycle, gust = round(ef["Force"] * 256), ef["Cycle"], ef["Gust"]
+                if not (0 < abs(force) < 0x8000):
+                    errors.append(f"Wind Force {ef['Force']}: nonzero, under 128")
+                if not (2 * WIND_RAMP < gust and gust + WIND_WARN < cycle < 0x10000):
+                    errors.append(f"Wind Cycle {cycle} / Gust {gust}: need Cycle > Gust + "
+                                  f"{WIND_WARN}, Gust > {2 * WIND_RAMP}")
+                phase = ef.get("Phase") or 0
+                if not 0 <= phase < 8192:
+                    errors.append(f"Wind Phase {phase}: 0-8191")
+                flags = (1 if ef["Alternate"] else 0) | (2 if ef.get("Dust") else 0) | phase << 2
+                rec = rec[:5] + (gust, flags, force, cycle)
+            entities.append(rec)
+    if sum(1 for e in entities if e[0] == ENTITY_TYPES["Wind"]) > MAX_WINDS:
+        errors.append(f"more than {MAX_WINDS} Wind zones")
     for ident in ("Flag1", "Flag2"):
         n = sum(1 for e in entities if e[0] == ENTITY_TYPES[ident])
         if n > MAX_FLAGS:

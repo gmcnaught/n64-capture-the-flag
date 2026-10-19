@@ -39,7 +39,10 @@ Every round starts with a 3, 2, 1, GO! countdown. Press Start to pause; the
 pause menu has a CONTROLS screen. Pick the stage (Arena, Forest, Desert,
 Snow, Lava) and the background on the title screen with up/down and
 left/right. On Snow, the pale blue ground is ice: you speed up and slow
-down slowly there, so a dash or a run slides on.
+down slowly there, so a dash or a run slides on. On Desert, a dust storm
+hangs over each of the two long side platforms and every few seconds
+blows outward, pushing players and dropped flags off toward the walls;
+the dust thickens and a whoosh sounds just before it blows.
 
 ## Controls
 

@@ -1,0 +1,27 @@
+# wind_gust Desert stage (a dust storm over each row 14 platform,
+level desert.lvl
+abilities 7
+tune fruit_min 0x0000ea60
+232 C / C
+3 LC / C
+15 LJC / C
+1 LC / C
+29 LJC / C
+6 C / C
+14 LC / C
+11 JC / C
+1 C / C
+20 JC / C
+2 C / C
+2 C / RC
+15 C / RJC
+1 C / RC
+30 C / RJC
+221 C / C
+14 C / RC
+11 C / JC
+1 C / C
+20 C / JC
+401 C / C
+hash 456ef09b
+kos 0 0
