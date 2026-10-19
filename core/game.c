@@ -1026,6 +1026,7 @@ void game_tick(Game *g, const InputState in[MAX_PLAYERS])
         stacked_before[t] = riders_of(g, t);
     for (int t = 0; t < n; t++) {
         Player *p = &g->players[t];
+        p->sfx = 0;                 /* player_tick clears it, but dead and caught players skip it */
         if (p->dead) {
             if (++g->respawn[t] >= RESPAWN_FRAMES)
                 spawn_player(g, t);
