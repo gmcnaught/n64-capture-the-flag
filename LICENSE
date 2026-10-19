@@ -19,10 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-This license covers the game's source code and the tools in this repository.
-Third-party art, music and fonts in new-assets/ and assets/src/fonts/, and the
-vendored libxm in platform/host/external/libxm, are under their own licenses;
-see CREDITS.md.
