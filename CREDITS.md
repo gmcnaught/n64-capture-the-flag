@@ -20,6 +20,13 @@
   <https://the-pixel-nook.itch.io/parallax-backgrounds-demo>. CC BY 4.0
   (<https://creativecommons.org/licenses/by/4.0/>). Mountain layer, cropped
   to its peaks (backdrop without the Bongseng pack).
+- **UI TendoTendo** controller by VerzatileDev, <https://verzatiledev.itch.io/>.
+  Assets by VerzatileDev, licensed under CC BY 4.0
+  (<https://creativecommons.org/licenses/by/4.0/>); its files may not be
+  redistributed, so they are not in this repository. With the pack in
+  `new-assets/controller-diagrams/`, the CONTROLS screen's controller is
+  assembled from its separate parts and scaled down (`tools/controls.py`);
+  without it, a simpler drawn one.
 
 ## Fonts
 
@@ -32,7 +39,8 @@
 - **Napping on a cloud** by congusbongus (title screen),
   <https://opengameart.org/content/napping-on-a-cloud>. CC0.
 - **Which Brand Of Mustard Shall I Buy** by congusbongus (in play),
-  <https://opengameart.org/content/which-brand-of-mustard-shall-i-buy>. CC0.
+  <https://opengameart.org/content/which-brand-of-mustard-shall-i-buy>. CC0. Modified: global volume set
+  to full on the first row, so the song is heard again after its fade-out loops.
 
 ## Code
 
