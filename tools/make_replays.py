@@ -87,8 +87,8 @@ Every scenario first waits out the round countdown (3, 2, 1, GO!).
                 at least 15 px left in 30 frames; P1 catches up with it
                 and picks it up, and it returns home.
   factory_capture  capture on the Factory stage (belts on the floor by the
-                flags, on the row 14 side slabs and the middle slab): each
-                team can still win.
+                flags and on the slabs of rows 12, 14 and 24): each team
+                can still win.
   factory_capture_blue  capture_blue on the Factory stage.
   desert_capture  capture on the Desert stage: routes are followed between
                 gusts (route, wait_out_gust), so each team can win there.

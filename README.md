@@ -56,9 +56,11 @@ against a wall or floor goes back to its start without losing a heart,
 dropping any flag it carries. On Lava, a geyser over each floor bump
 bubbles, then erupts every few seconds, throwing anyone standing in it
 (and dropped flags) high up out of the low ground. On Factory, conveyor belts
-keep running under the flags (toward the wall), on the two long side
-platforms (toward the middle) and on the middle platform (outward): they
-carry whoever stands on them, and dropped flags, but not anyone in the air.
+keep running under the flags (toward the wall), on the long side
+platforms and the small ones above the middle block (toward the middle),
+on top of the middle block (outward) and on the low platforms by the
+pillar (toward it): they carry whoever stands on them, and dropped flags,
+but not anyone in the air.
 
 ## Controls
 
