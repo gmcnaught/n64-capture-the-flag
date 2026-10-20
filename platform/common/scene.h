@@ -17,7 +17,7 @@
  * SPR_SCENERY in one pair per backdrop: the platform reloads them when
  * Game.lv.tileset or Game.backdrop changes. */
 enum { SPR_TILES, SPR_P1, SPR_P2, SPR_PAD, SPR_FLAG, SPR_SKY, SPR_SCENERY, SPR_HUD, SPR_FRUIT, SPR_FONT,
-       SPR_SLASH, SPR_CONTROLS, SPR_PLATFORM, SPR_P3, SPR_P4, SPR_COUNT };
+       SPR_SLASH, SPR_CONTROLS, SPR_PLATFORM, SPR_P3, SPR_P4, SPR_BELT, SPR_COUNT };
 
 /* File name (no extension) of sheet spr; tileset (Level.tileset) applies
  * to SPR_TILES only, backdrop (BACKDROP_*) to SPR_SKY and SPR_SCENERY. */

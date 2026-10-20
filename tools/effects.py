@@ -9,6 +9,14 @@ the renderer can tint it per team (platform/common/scene.c draw_slash).
 
 dash_frames() makes the dash animation row of a Dino sheet from a run
 frame: leaning forward, with speed lines behind.
+
+belt() returns the "belt" sheet (conveyor belts, core/level.h
+SURFACE_BELT_*), BELT_CELL art px per cell, drawn over a belt cell's
+terrain tile:
+  row 0  belt moving right: 2 cells of rail, dark band with yellow
+         chevrons every BELT_CELL px (the renderer scrolls along it)
+  row 1  the same mirrored: moving left
+  row 2  roller ends: left end, right end
 """
 import math
 
@@ -82,6 +90,46 @@ def dash_frames(run, foot=21):
                 px[x, y] = SPEED
         frames.append(im)
     return frames
+
+
+BELT_CELL = 8
+RAIL = (184, 192, 200, 255)
+BAND = (48, 52, 58, 255)
+CHEVRON = (232, 184, 48, 255)
+UNDER = (30, 32, 36, 255)
+HUB = (128, 136, 144, 255)
+
+
+def belt():
+    c = BELT_CELL
+    im = Image.new("RGBA", (2 * c, 3 * c))
+    px = im.load()
+    for x in range(2 * c):
+        px[x, 0] = RAIL
+        for y in range(1, 6):
+            px[x, y] = BAND
+        px[x, 6] = UNDER
+        px[x, 7] = HUB if x % 4 == 1 else UNDER     # rollers under the band
+        for y in range(1, 6):                       # ">" two px thick, tip on row 3
+            if x % c in (2 - abs(y - 3) + 2, 2 - abs(y - 3) + 3):
+                px[x, y] = CHEVRON
+    for x in range(2 * c):
+        for y in range(c):
+            px[x, c + y] = px[2 * c - 1 - x, y]
+    # Ends: a drum with a hub, the band wrapping round it.
+    for side in range(2):
+        for y in range(c):
+            for x in range(c):
+                dx = (c - 1 - x) if side else x     # 0 at the outer edge
+                if (dx, y) in ((0, 0), (0, 7), (0, 1), (0, 6), (1, 0), (1, 7)):
+                    continue                        # rounded corners
+                col = RAIL if y == 0 else UNDER if y >= 6 else BAND
+                if dx == 0 or (dx == 1 and y in (1, 6)):
+                    col = RAIL
+                if 2 <= dx <= 4 and 2 <= y <= 4:
+                    col = HUB if (dx, y) != (3, 3) else UNDER
+                px[side * c + x, 2 * c + y] = col
+    return im
 
 
 if __name__ == "__main__":

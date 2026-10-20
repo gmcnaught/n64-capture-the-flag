@@ -9,7 +9,7 @@
 
 static const char *const sprite_names[SPR_COUNT] = {
     "tiles", "p1", "p2", "jumppad", "flag", "sky", "scenery", "hud", "fruit", "font", "slash",
-    "controls", "platform", "p3", "p4",
+    "controls", "platform", "p3", "p4", "belt",
 };
 
 void scene_sheet_name(int spr, int backdrop, int tileset, char *out, int size)
@@ -44,6 +44,8 @@ int scene_tileset(const Level *lv)
 #define CLOUD_H 10              /* centered, top on the slot's top row */
 #define CLOUD_CELLS_MAX 4
 #define CLOUD_RISE 1            /* cloud top above the platform's top edge (bumps) */
+#define BELT_STRIP 32           /* "belt": rows of 32x8 strips (moving right, moving left),
+                                 * then the left and right roller ends, 16x8 each */
 
 static void tile(const DrawApi *d, uint16_t t, int x, int y)
 {
@@ -133,6 +135,34 @@ static void draw_platforms(const Game *g, const DrawApi *d)
                 tile(d, tileset_rect_tiles[sides], s->x + x * TILE_W, s->y + y * TILE_H);
             }
     }
+}
+
+/* Conveyor belts over their cells' tiles: the chevrons scroll at
+ * tuning.belt_speed (by Game.anim, so they stop while paused); a roller
+ * ends each run of belt cells (belts running opposite ways meet without one). */
+static int is_belt(uint8_t s) { return s == SURFACE_BELT_L || s == SURFACE_BELT_R; }
+
+static void draw_belts(const Game *g, const DrawApi *d)
+{
+    const Level *lv = &g->lv;
+    if (!(lv->surfaces & SURFACE_BELTS))
+        return;
+    int off = (int)((uint32_t)((int64_t)g->anim * g->tuning.belt_speed >> 16) % TILE_W);
+    for (int cy = 0; cy < lv->cell_h; cy++)
+        for (int cx = 0; cx < lv->cell_w; cx++) {
+            uint8_t s = level_surface(lv, cx, cy);
+            if (!is_belt(s))
+                continue;
+            int x = cx * TILE_W, y = cy * TILE_H;
+            if (!is_belt(level_surface(lv, cx - 1, cy)))
+                d->blit(d->ctx, SPR_BELT, 0, 2 * TILE_H, TILE_W, TILE_H, x, y, 0);
+            else if (!is_belt(level_surface(lv, cx + 1, cy)))
+                d->blit(d->ctx, SPR_BELT, TILE_W, 2 * TILE_H, TILE_W, TILE_H, x, y, 0);
+            else if (s == SURFACE_BELT_R)   /* the strip slides right under a fixed window */
+                d->blit(d->ctx, SPR_BELT, (TILE_W - off) % TILE_W, 0, TILE_W, TILE_H, x, y, 0);
+            else
+                d->blit(d->ctx, SPR_BELT, off, TILE_H, TILE_W, TILE_H, x, y, 0);
+        }
 }
 
 /* A carried flag is held up: pole on the carrier's center line, base
@@ -747,6 +777,7 @@ void scene_draw_background(const Game *g, const DrawApi *d)
 
 void scene_draw(const Game *g, const DrawApi *d, int debug)
 {
+    draw_belts(g, d);
     draw_platforms(g, d);
     draw_flags(g, d);
     draw_pads(g, d);

@@ -420,9 +420,13 @@ static void update_flags(Game *g)
             b->x = (int16_t)(p->body.x + (p->body.w - FLAG_W) / 2 - p->facing * 8);
             b->y = (int16_t)(p->body.y - 6);
         } else if (f->state == FS_DROPPED) {
-            fx wind = game_wind_at(g, b);
-            if (wind)                       /* a gust blows it along */
-                body_move_x(b, wind, &g->lv);
+            /* A gust blows it along, a belt it rests on carries it. */
+            fx push = game_wind_at(g, b);
+            if ((g->lv.surfaces & SURFACE_BELTS) && b->vy == 0 &&
+                (body_on_solid(b, &g->lv) || body_on_platform(b, &g->lv)))
+                push += belt_push(b, &g->lv, &g->tuning);
+            if (push)
+                body_move_x(b, push, &g->lv);
             geyser_lift(g, b);
             b->vy += g->tuning.gravity;
             if (b->vy > g->tuning.fall_max)
@@ -1196,10 +1200,11 @@ uint32_t game_hash(const Game *g)
             for (int o = 0; o < g->player_count; o++)
                 h = mix(h, g->last_hit[t][o]);
     }
-    int fields = tuning_field_count;
-    if (!(g->lv.surfaces & (1u << SURFACE_ICE)))
-        fields -= ICE_TUNING_FIELDS;            /* earlier replays keep their hashes */
-    for (int i = 0; i < fields; i++)
-        h = mix(h, (uint32_t)*(const int32_t *)((const char *)&g->tuning + tuning_fields[i].offset));
+    /* Surface tuning only on levels with that surface: earlier replays keep their hashes. */
+    int belts = tuning_field_count - BELT_TUNING_FIELDS, ice = belts - ICE_TUNING_FIELDS;
+    for (int i = 0; i < tuning_field_count; i++)
+        if (i < ice || (i < belts ? (g->lv.surfaces & (1u << SURFACE_ICE)) != 0
+                                  : (g->lv.surfaces & SURFACE_BELTS) != 0))
+            h = mix(h, (uint32_t)*(const int32_t *)((const char *)&g->tuning + tuning_fields[i].offset));
     return h;
 }

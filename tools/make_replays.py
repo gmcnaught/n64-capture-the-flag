@@ -76,6 +76,20 @@ Every scenario first waits out the round countdown (3, 2, 1, GO!).
                 storm platform; P1 stands right of it and kicks it just
                 before the gust, then walks right: the dropped flag is
                 blown left at least 20 px.
+  belt_ride     Factory stage (conveyor belts: the floor by each team's
+                flags runs toward its wall, 0.75 px/frame). P1 goes left
+                over the bump onto the belt and lets go: standing still, it is carried at
+                least 25 px in 40 frames, to the wall; walking right from
+                there for 30 frames it gets 40-62 px (plain floor: about
+                76).
+  belt_flag     Factory stage. P1 waits on the floor bump; P2 takes a red
+                flag; P1 walks over and kicks the carrier on the belt: the dropped flag is carried
+                at least 15 px left in 30 frames; P1 catches up with it
+                and picks it up, and it returns home.
+  factory_capture  capture on the Factory stage (belts on the floor by the
+                flags, on the row 14 side slabs and the middle slab): each
+                team can still win.
+  factory_capture_blue  capture_blue on the Factory stage.
   desert_capture  capture on the Desert stage: routes are followed between
                 gusts (route, wait_out_gust), so each team can win there.
   desert_capture_blue  capture_blue on the Desert stage.
@@ -516,6 +530,56 @@ def ice_slide():
     return b
 
 
+FACTORY = NO_FRUIT.replace("arena.lvl", "factory.lvl")
+
+
+def belt_ride():
+    b = Builder(FACTORY)
+    countdown(b)
+    route(b, 0, "rest:100,170,200")                         # over the bump, onto the belt
+    s = b.hold("C / C", until=lambda s: s.p[0].vx == 0, limit=30)
+    x = s.p[0].x
+    s = b.hold("C / C", 40)
+    check(s.p[0].vx == 0 and x - s.p[0].x >= 25, "P1 not carried by the belt", s)
+    s = b.hold("C / C", until=lambda s: s.p[0].x == WALL_X, limit=200)
+    s = b.hold("C / C", 10)
+    check(s.p[0].x == WALL_X, "P1 not held at the wall", s)
+    x = s.p[0].x
+    s = b.hold(inp(0, "R"), 30)
+    check(40 <= s.p[0].x - x <= 62, "walking against the belt not slowed", s)
+    b.hold("C / C", 30)
+    return b
+
+
+def belt_flag():
+    b = Builder(FACTORY)
+    countdown(b)
+    b.hold("C / C", 10)
+    route(b, 0, "rest:200,224,192")                         # P1 on the bump, off the belt
+    s = route(b, 1, f"flag:{FLAGS[0][2]}", done=lambda s: s.p[1].flag >= 0)
+    check(s.p[1].flag in FLAGS[0], "P2 took no red flag", s)   # may grab one on the way
+    at_rest(b, 1)
+    b.hold(inp(0, "L"), until=lambda s: s.p[0].x - s.p[1].x <= 34, limit=200)
+    b.hold("AC / C", 2)                                     # P1 kicks the carrier
+    s = b.hold("C / C", until=lambda s: s.p[1].flag < 0, limit=20)
+    check(s.p[1].x >= 320 and s.p[0].dfx >= 0, "carrier not sent home, or no flag dropped", s)
+    x = s.p[0].dfx
+    s = b.hold("C / C", 30)
+    check(x - s.p[0].dfx >= 15, "dropped flag not carried left", s)
+    s = b.hold(inp(0, "L"), until=lambda s: s.p[0].dfx < 0, limit=200)
+    check(s.p[0].flag < 0, "P1 did not return the flag home", s)    # picked up in the home area
+    b.hold("C / C", 30)
+    return b
+
+
+def factory_capture():
+    return capture_team(0, "factory.lvl")
+
+
+def factory_capture_blue():
+    return capture_team(1, "factory.lvl")
+
+
 def steal_drop():
     b = Builder(NO_FRUIT)
     countdown(b)
@@ -760,7 +824,7 @@ def main():
                  snow_capture, snow_capture_blue, wind_gust, wind_drop, desert_capture,
                  desert_capture_blue, platform_ride, platform_squish, platform_push, sky_capture,
                  sky_capture_blue, lava_geyser, lava_capture, lava_capture_blue, team_hits,
-                 team_flags)
+                 team_flags, belt_ride, belt_flag, factory_capture, factory_capture_blue)
     names = sys.argv[1:]
     for fn in scenarios:
         if names and fn.__name__ not in names:

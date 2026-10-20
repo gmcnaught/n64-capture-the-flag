@@ -38,6 +38,8 @@ Layouts below are in art px (before the stretch):
             grids; also writes their layout to platform/common/font_glyphs.h
   slash     attack slash (tools/effects.py): 3 side frames of 16x24, 3 up
             frames of 24x16
+  belt      conveyor belts (tools/effects.py): 8x8 cells; rows moving right,
+            moving left, roller ends
   controls  N64 controller picture for the CONTROLS screen (tools/controls.py),
             already at sim resolution (232x108, not stretched)
   platform  Rocky Roads cloud platforms halved (nearest), for one-way moving
@@ -218,6 +220,7 @@ def sheets():
     yield "hud", hearts.resize((hearts.width // 2, hearts.height // 2), Image.NEAREST)
     yield "font", font.sheet()
     yield "slash", effects.slash()
+    yield "belt", effects.belt()
     yield "platform", clouds()
 
 

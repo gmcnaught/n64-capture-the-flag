@@ -19,8 +19,9 @@ LDtk's own tile layers are for the editor view only and are not read.
 
 Level rules (errors stop the import):
   - 8 px grid; one IntGrid layer named "Collision" (values 1-4);
-  - optional IntGrid layer "Surface" (1 = ice), only on solid and one-way
-    cells: the high nibble of each cell (core/level.h SURFACE_*);
+  - optional IntGrid layer "Surface" (1 = ice, 2 = conveyor belt moving
+    left, 3 = moving right), only on solid and one-way cells: the high
+    nibble of each cell (core/level.h SURFACE_*);
   - entities: see ENTITY_TYPES (at most one start and goal per team, up
     to MAX_FLAGS flags per team; goals are resizable zones; up to
     MAX_WINDS Wind and Geyser zones together, fields Force (px/frame, as
@@ -83,8 +84,8 @@ def convert(level):
         errors.append("Surface layer must match the Collision grid")
         surface = [0] * len(cells)
     for i, (c, s) in enumerate(zip(cells, surface)):
-        if s not in (0, terrain.SURFACE_ICE):
-            errors.append(f"Surface value {s} at cell {i % w},{i // w}: only 1 (ice)")
+        if s not in (0, terrain.SURFACE_ICE, terrain.SURFACE_BELT_L, terrain.SURFACE_BELT_R):
+            errors.append(f"Surface value {s} at cell {i % w},{i // w}: 1 (ice), 2 or 3 (belt)")
         elif s and c not in (1, 2):
             errors.append(f"Surface at cell {i % w},{i // w}: not on a solid or one-way cell")
 

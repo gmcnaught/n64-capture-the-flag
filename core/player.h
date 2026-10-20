@@ -29,6 +29,7 @@ typedef struct {
     int32_t weight_jump;        /* jump and double jump speed while stood on */
     int32_t fruit_min, fruit_range; /* frames until the next water fruit: min + rnd % range */
     int32_t ice_accel, ice_decel;   /* run_accel, run_decel standing on SURFACE_ICE */
+    int32_t belt_speed;         /* px/frame a conveyor belt moves what stands on it */
 } PlayerTuning;
 
 typedef struct {
@@ -39,9 +40,14 @@ typedef struct {
 
 extern const TuningField tuning_fields[];
 extern const int tuning_field_count;
-/* The last ICE_TUNING_FIELDS entries of tuning_fields are the ice ones
- * (game_hash mixes them only on levels with ice). */
+/* The last BELT_TUNING_FIELDS entries of tuning_fields are the belt ones,
+ * the ICE_TUNING_FIELDS before them the ice ones (game_hash mixes each
+ * group only on levels with that surface). */
 #define ICE_TUNING_FIELDS 2
+#define BELT_TUNING_FIELDS 1
+/* What a belt under the body's feet adds to its move this frame (fx
+ * px/frame): the belt under its middle, else under either foot; 0 off belts. */
+fx belt_push(const Body *b, const Level *lv, const PlayerTuning *t);
 void tuning_defaults(PlayerTuning *t);
 
 enum { PS_NORMAL, PS_DASH, PS_CLIMB, PS_HURT };

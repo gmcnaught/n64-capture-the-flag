@@ -1,0 +1,14 @@
+# belt_ride Factory stage (conveyor belts: the floor by each team's
+level factory.lvl
+abilities 7
+tune fruit_min 0x0000ea60
+222 C / C
+3 LC / C
+11 LJC / C
+1 LC / C
+42 LJC / C
+137 C / C
+30 RC / C
+30 C / C
+hash f11b35ab
+kos 0 0

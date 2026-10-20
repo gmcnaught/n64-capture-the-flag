@@ -1,0 +1,32 @@
+# belt_flag Factory stage. P1 waits on the floor bump; P2 takes a red
+level factory.lvl
+abilities 7
+tune fruit_min 0x0000ea60
+232 C / C
+12 LC / C
+2 DC / C
+2 DJC / C
+11 LC / C
+7 C / C
+2 C / RC
+15 C / RJC
+1 C / RC
+30 C / RJC
+6 C / C
+2 C / LC
+11 C / LJC
+1 C / LC
+21 C / LJC
+6 C / C
+15 C / LC
+30 C / LJC
+1 C / LC
+54 C / LJC
+21 C / C
+41 LC / C
+2 AC / C
+31 C / C
+1 LC / C
+30 C / C
+hash 104a52af
+kos 0 0

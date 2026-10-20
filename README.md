@@ -40,7 +40,7 @@ Each team keeps three flags by its start.
 
 Every round starts with a 3, 2, 1, GO! countdown. Press Start to pause; the
 pause menu has a CONTROLS screen. Start on the title screen opens the
-match setup: pick the stage (Arena, Forest, Desert, Snow, Lava, Sky) and
+match setup: pick the stage (Arena, Forest, Desert, Snow, Lava, Sky, Factory) and
 the players (1 VS 1, 2 VS 1, 2 VS 2) with up/down and left/right, then
 Start. On Snow, the ground is ice: you speed up and slow down slowly
 there, so a dash or a run slides on. On Desert, a dust storm
@@ -55,7 +55,10 @@ aside. A player crushed
 against a wall or floor goes back to its start without losing a heart,
 dropping any flag it carries. On Lava, a geyser over each floor bump
 bubbles, then erupts every few seconds, throwing anyone standing in it
-(and dropped flags) high up out of the low ground.
+(and dropped flags) high up out of the low ground. On Factory, conveyor belts
+keep running under the flags (toward the wall), on the two long side
+platforms (toward the middle) and on the middle platform (outward): they
+carry whoever stands on them, and dropped flags, but not anyone in the air.
 
 ## Controls
 

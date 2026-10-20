@@ -66,7 +66,10 @@ enum {
 };
 
 /* Surfaces: what a solid or one-way cell's top is made of. */
-enum { SURFACE_NONE = 0, SURFACE_ICE = 1 };
+enum { SURFACE_NONE = 0, SURFACE_ICE = 1, SURFACE_BELT_L = 2, SURFACE_BELT_R = 3 };
+/* Conveyor belts move what stands on them, left or right (core/player.c,
+ * core/game.c). */
+#define SURFACE_BELTS ((1u << SURFACE_BELT_L) | (1u << SURFACE_BELT_R))
 
 /* Backdrops (sky and scenery sheet pairs, tools/scenery.py BACKDROPS order):
  * the level's is the default, the title screen can pick another. */

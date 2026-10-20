@@ -21,6 +21,7 @@ const TuningField tuning_fields[] = {
     FIELD(carry_speed, 1), FIELD(weight_speed, 1), FIELD(weight_jump, 1),
     FIELD(fruit_min, 0), FIELD(fruit_range, 0),
     FIELD(ice_accel, 1), FIELD(ice_decel, 1),
+    FIELD(belt_speed, 1),
 };
 const int tuning_field_count = (int)(sizeof tuning_fields / sizeof tuning_fields[0]);
 
@@ -47,6 +48,18 @@ static int on_ice(const Body *b, const Level *lv)
     int cy = (b->y + b->h) >> TILE_SHIFT_Y;
     return level_surface(lv, b->x >> TILE_SHIFT_X, cy) == SURFACE_ICE ||
            level_surface(lv, (b->x + b->w - 1) >> TILE_SHIFT_X, cy) == SURFACE_ICE;
+}
+
+fx belt_push(const Body *b, const Level *lv, const PlayerTuning *t)
+{
+    int cy = (b->y + b->h) >> TILE_SHIFT_Y;
+    int xs[3] = {b->x + b->w / 2, b->x, b->x + b->w - 1};
+    for (int i = 0; i < 3; i++) {
+        uint8_t s = level_surface(lv, xs[i] >> TILE_SHIFT_X, cy);
+        if (s == SURFACE_BELT_L || s == SURFACE_BELT_R)
+            return s == SURFACE_BELT_L ? -t->belt_speed : t->belt_speed;
+    }
+    return 0;
 }
 
 static int overlaps_ladder(const Body *b, const Level *lv)
@@ -348,6 +361,7 @@ void player_tick(Player *p, const Level *lv, const PlayerTuning *t,
     int on_solid = body_on_solid(b, lv);
     int on_plat = !p->drop && body_on_platform(b, lv);
     p->grounded = (on_solid || on_plat) && b->vy >= 0 && p->state != PS_CLIMB;
+    fx push = p->push_x + (p->grounded ? belt_push(b, lv, t) : 0);  /* wind, belt */
     if (p->grounded) {
         p->coyote = (uint8_t)t->coyote_frames;
         p->jumping = 0;
@@ -432,7 +446,7 @@ void player_tick(Player *p, const Level *lv, const PlayerTuning *t,
             /* Fast start, slowing by dash_decel each frame. */
             b->vy = 0;
             b->vx = p->dash_dir * (t->dash_speed - t->dash_decel * (t->dash_frames - p->dash_timer));
-            int hit = body_move_x(b, b->vx + p->push_x, lv);
+            int hit = body_move_x(b, b->vx + push, lv);
             if (hit || --p->dash_timer == 0)
                 end_dash(p, t, hit);
             p->grounded = on_ground(p, lv);
@@ -516,7 +530,7 @@ void player_tick(Player *p, const Level *lv, const PlayerTuning *t,
 
     int was_grounded = p->grounded;
     fx fall = b->vy;
-    if (body_move_x(b, b->vx + p->push_x, lv))
+    if (body_move_x(b, b->vx + push, lv))
         b->vx = 0;
     if (body_move_y(b, b->vy, lv, !p->drop)) {
         if (b->vy > 0 && !was_grounded && fall > FX(3)) {

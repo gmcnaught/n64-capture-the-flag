@@ -245,6 +245,7 @@ EXTRAS = [204, 205, 206, 207]           # arena.png ids, in LADDER_TOP.. order
 VENT_LEFT, VENT_MID, VENT_RIGHT, VENT_SINGLE = range(EXTRA_FIRST + 4, EXTRA_FIRST + 8)
 ICE_FIRST = EXTRA_FIRST + BLOB_COLS
 SURFACE_ICE = 1                         # core/level.h SURFACE_ICE
+SURFACE_BELT_L, SURFACE_BELT_R = 2, 3      # core/level.h: belts are drawn over the tile
 
 
 def icy(im):

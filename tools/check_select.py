@@ -37,7 +37,8 @@ LEVELS = os.path.join(ROOT, "build", "assets", "levels")
 
 FULL_PATHS = ["core/fixed.h", "core/body.", "core/level.", "core/player.", "core/player_tuning.h",
               "core/input.h", "platform/common/replay.", "platform/n64/", "Makefile"]
-SMOKE = ["menu", "steal_drop", "duel", "stack", "ice_slide", "wind_gust", "platform_push"]
+SMOKE = ["menu", "steal_drop", "duel", "stack", "ice_slide", "wind_gust", "platform_push",
+         "belt_ride"]
 LEVEL_SOURCES = ["assets/src/levels/", "tools/ldtk_import.py", "tools/terrain.py",
                  "tools/scenery.py"]
 FEATURE_FILES = ["core/game.c", "core/game.h", "platform/common/scene.c"]

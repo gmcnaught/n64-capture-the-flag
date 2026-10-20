@@ -47,6 +47,7 @@
     .fruit_range        = 600, \
     .ice_accel          = 0x00001000, /* 0.0625 */ \
     .ice_decel          = 0x00000ccd, /* 0.0500 */ \
+    .belt_speed         = 0x0000c000, /* 0.7500 */ \
 }
 
 #endif
