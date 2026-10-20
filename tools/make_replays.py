@@ -66,8 +66,9 @@ Every scenario first waits out the round countdown (3, 2, 1, GO!).
                 slabs): each team can still win.
   snow_capture_blue  capture_blue on the Snow stage.
   wind_gust     Desert stage (a dust storm over each row 14 platform,
-                blowing outward). P1 stands on the left platform, P2 on the
-                right one: the gust blows each off its outer end.
+                blowing outward, the two in turn). P1 stands on the left
+                platform until its gust blows it off the outer end, then P2
+                on the right one until its gust does.
   wind_drop     Desert stage. P2 takes a red flag and stands on the left
                 storm platform; P1 stands right of it and kicks it just
                 before the gust, then walks right: the dropped flag is
@@ -112,6 +113,8 @@ FLAGS = {0: [0, 1, 2], 1: [3, 4, 5]}     # Game.flags indices per team (entity o
 COUNTDOWN = 3 * 60 + 40                 # COUNTDOWN_FRAMES (core/game.h)
 COUNTDOWN_GO = 40
 PLATFORM_WAIT, PLATFORM_RETRIES = 30, 12   # no route with moving platforms: wait, search again
+GUST_RETRIES = 10                       # gusts waited out before a route move fits a calm
+MOVE_MARGIN, JUMP_HEIGHT = 16, 80       # move_box: px beside a move's span, above its top
 
 
 def inp(side, d):
@@ -161,12 +164,23 @@ def move_frames(s, side, tx):
     return abs(tx - p.x) * 10 // (17 if p.flag >= 0 else 27) + 120
 
 
-def wait_out_gust(b, side, hit):
-    """Stand through the next gust (it may push the player anywhere) and
-    come to rest after it; the state if hit(state) on the way, else None."""
-    s = b.hold(inp(side, ""), until=lambda s: s.p[side].calm == 0 or hit(s), limit=2000)
+def move_box(s, side, tx, ey):
+    """Box a route move from player side's spot to (tx, ey) may cross: its
+    span, MOVE_MARGIN px wider, from a jump's height over it down to its end."""
+    p = s.p[side]
+    return (min(p.x, tx) - MOVE_MARGIN, min(p.y, ey) - JUMP_HEIGHT,
+            max(p.x, tx) + PLAYER_W + MOVE_MARGIN, max(p.y, ey) + PLAYER_W)
+
+
+def wait_out_gust(b, side, hit, box=None):
+    """Stand through the next gust of the wind zones overlapping box (all of
+    them if None; it may push the player anywhere) and come to rest after
+    it; the state if hit(state) on the way, else None."""
+    def calm(s):
+        return s.p[side].calm if box is None else s.p[side].calm_in(*box)
+    s = b.hold(inp(side, ""), until=lambda s: calm(s) == 0 or hit(s), limit=2000)
     if not hit(s):
-        s = b.hold(inp(side, ""), until=lambda s: s.p[side].calm > 0 or hit(s), limit=2000)
+        s = b.hold(inp(side, ""), until=lambda s: calm(s) > 0 or hit(s), limit=2000)
     if hit(s):
         return s
     at_rest(b, side)
@@ -182,18 +196,18 @@ def route(b, side, target, done=None):
     found again from where it left the player. With moving platforms, if
     there is no route now, the player stands PLATFORM_WAIT frames and the
     route is searched again (up to PLATFORM_RETRIES times)."""
-    while True:
-        s = route_calm(b, side, target, done)
-        if s is None and done:
-            s = wait_out_gust(b, side, done)
-        elif s is None:
-            wait_out_gust(b, side, lambda s: False)
+    for _ in range(GUST_RETRIES):
+        s, box = route_calm(b, side, target, done)
+        if s is None:
+            s = wait_out_gust(b, side, done or (lambda s: False), box)
         if s is not None:
             return s
+    raise RuntimeError(f"P{side + 1} found no calm for its route to {target}: {b.state()}")
 
 
 def route_calm(b, side, target, done):
-    """route, up to the first move that would meet a gust (None then)."""
+    """route, up to the first move that would meet a gust: (state, None),
+    or (None, the move's box) then."""
     s = at_rest(b, side)
     moves = find_route(b, side, target)
     for _ in range(PLATFORM_RETRIES):
@@ -208,8 +222,9 @@ def route_calm(b, side, target, done):
     hit = done or (lambda s: False)
     for i, (d, tx, kind, air, ex, ey) in enumerate(moves):
         tx, ex, ey = int(tx), int(ex), int(ey)
-        if s.p[side].calm < move_frames(s, side, tx):
-            return None
+        box = move_box(s, side, tx, ey)
+        if s.p[side].calm_in(*box) < move_frames(s, side, tx):
+            return None, box
         b.hold(inp(side, ""), 1)
         if d == "L":
             s = b.hold(inp(side, d), until=lambda s: s.p[side].x <= tx or hit(s), limit=400)
@@ -234,15 +249,15 @@ def route_calm(b, side, target, done):
             if not hit(s) and (s.p[side].vx != 0 or not s.p[side].grounded):
                 s = at_rest(b, side)    # (routefind takes no frame when landed at rest)
         if hit(s):
-            return s
+            return s, None
         p = s.p[side]
         if target.startswith("rest:") and i == len(moves) - 1:
             x0, x1, y = map(int, target[5:].split(","))
             check(x0 <= p.x <= x1 and p.y == y, f"P{side + 1} not at {target}", s)
-            return s
+            return s, None
         check((p.x, p.y) == (ex, ey), f"P{side + 1} off route at move {i + 1} {moves[i]}", s)
     check(done is None, f"P{side + 1} reached the end of the route without {target}", s)
-    return s
+    return s, None
 
 
 def desert_capture():
@@ -257,17 +272,22 @@ def desert_capture_blue():
 LEFT_SLAB, RIGHT_SLAB, SLAB_Y = (64, 136), (480, 552), 96
 
 
+def slab_calm(s, slab):
+    """Frames to the next gust over a storm platform (0 while it blows)."""
+    return s.p[0].calm_in(slab[0], SLAB_Y, slab[1] + PLAYER_W, SLAB_Y + 16)
+
+
 def wind_gust():
     b = Builder(NO_FRUIT.replace("arena.lvl", "desert.lvl"))
     countdown(b)
     b.hold("C / C", 10)
-    route(b, 0, f"rest:88,112,{SLAB_Y}")
-    route(b, 1, f"rest:504,528,{SLAB_Y}")
-    s = b.hold("C / C", until=lambda s: s.p[0].calm == 0, limit=600)
-    x = [s.p[0].x, s.p[1].x]
-    s = b.hold("C / C", until=lambda s: s.p[0].calm > 0, limit=600)
-    check(x[0] - s.p[0].x >= 40 or s.p[0].y > SLAB_Y, "P1 not blown left off its platform", s)
-    check(s.p[1].x - x[1] >= 40 or s.p[1].y > SLAB_Y, "P2 not blown right off its platform", s)
+    for side, slab, rest, out in ((0, LEFT_SLAB, "88,112", -1), (1, RIGHT_SLAB, "504,528", 1)):
+        route(b, side, f"rest:{rest},{SLAB_Y}")
+        s = b.hold("C / C", until=lambda s: slab_calm(s, slab) == 0, limit=600)
+        x = s.p[side].x
+        s = b.hold("C / C", until=lambda s: slab_calm(s, slab) > 0, limit=600)
+        check((s.p[side].x - x) * out >= 40 or s.p[side].y > SLAB_Y,
+              f"P{side + 1} not blown {'left' if out < 0 else 'right'} off its platform", s)
     b.hold("C / C", 30)
     return b
 
@@ -278,18 +298,19 @@ def wind_drop():
     b.hold("C / C", 10)
     s = route(b, 1, f"flag:{FLAGS[0][0]}", done=lambda s: s.p[1].flag >= 0)
     check(s.p[1].flag in FLAGS[0], "P2 took no red flag", s)
-    wait_out_gust(b, 1, lambda s: False)                    # a whole calm for the setup
+    left = (LEFT_SLAB[0], SLAB_Y, LEFT_SLAB[1] + PLAYER_W, SLAB_Y + 16)
+    wait_out_gust(b, 1, lambda s: False, left)              # a whole calm for the setup
     route(b, 1, f"rest:72,88,{SLAB_Y}")                     # carrier on the left storm platform
     s = route(b, 0, f"rest:112,128,{SLAB_Y}")               # P1 right of it
-    check(s.p[0].calm > 20 and s.p[1].y == SLAB_Y, "setup ran into the gust", s)
-    b.hold("C / C", until=lambda s: s.p[0].calm == 20, limit=600)
+    check(slab_calm(s, LEFT_SLAB) > 20 and s.p[1].y == SLAB_Y, "setup ran into the gust", s)
+    b.hold("C / C", until=lambda s: slab_calm(s, LEFT_SLAB) == 20, limit=600)
     b.hold(inp(0, "L"), until=lambda s: s.p[0].x - s.p[1].x <= 34, limit=60)
     b.hold("AC / C", 2)                                     # P1 kicks the carrier
     s = b.hold("C / C", until=lambda s: s.p[1].flag < 0, limit=20)
     check(s.p[0].dfx >= 0, "no flag dropped", s)
-    s = b.hold("C / C", until=lambda s: s.p[0].calm == 0 and s.p[0].dfx >= 0, limit=60)
+    s = b.hold("C / C", until=lambda s: slab_calm(s, LEFT_SLAB) == 0 and s.p[0].dfx >= 0, limit=60)
     x = s.p[0].dfx
-    s = b.hold(inp(0, "R"), until=lambda s: s.p[0].calm > 0, limit=300)   # P1 keeps off it
+    s = b.hold(inp(0, "R"), until=lambda s: slab_calm(s, LEFT_SLAB) > 0, limit=300)  # P1 keeps off it
     check(s.p[0].dfx >= 0 and x - s.p[0].dfx >= 20, "dropped flag not blown left", s)
     b.hold("C / C", 30)
     return b

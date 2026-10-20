@@ -21,7 +21,8 @@ front cell, -1 without water), rx (sub-pixel x remainder, Q16.16), cd
 (countdown), wind (push, px/frame), wdir (gust direction), calm (frames
 to the next gust), dfx (x of a dropped flag, -1 none), ride (index of the
 moving platform the player stands on, -1 none), pl (each moving
-platform's (x, y), in Game.platforms order).
+platform's (x, y), in Game.platforms order), zones (each wind zone's x, y,
+w, h and frames to its next gust).
 Conditions are checked on the state after
 each frame of the new run.
 """
@@ -36,7 +37,7 @@ LINE = re.compile(r"^(\d+) P(\d) x (-?\d+) y (-?\d+) vx (\S+) vy (\S+) st (\d+) 
                   r"hp (\d+) atk (\d+) dead (\d+) flag (-?\d+) wins (\d+) winner (\d+) "
                   r"fruit (\d+) spot (\d+) water (\d+) caught (\d+) "
                   r"title (\d+) paused (\d+) menu (\d+) wfx (-?\d+) wfy (-?\d+) rx (-?\d+) cd (\d+) "
-                  r"wind (\S+) wdir (-?\d+) calm (\d+) dfx (-?\d+) ride (-?\d+) pl (\S+)")
+                  r"wind (\S+) wdir (-?\d+) calm (\d+) dfx (-?\d+) ride (-?\d+) pl (\S+) zones (\S+)")
 
 
 class PlayerState:
@@ -59,6 +60,14 @@ class PlayerState:
         self.ride = int(g[29])          # Game.platforms index stood on, -1 none
         v = [] if g[30] == "-" else [int(n) for n in g[30].split(",")]
         self.pl = list(zip(v[::2], v[1::2]))    # moving platforms' top-left (x, y)
+        v = [] if g[31] == "-" else [int(n) for n in g[31].split(",")]
+        self.zones = [tuple(v[i:i + 5]) for i in range(0, len(v), 5)]  # wind (x, y, w, h, calm)
+
+    def calm_in(self, x0, y0, x1, y1):
+        """Frames to the next gust of the wind zones overlapping the box
+        (0 while one blows, 65535 none)."""
+        return min((c for x, y, w, h, c in self.zones
+                    if x < x1 and x0 < x + w and y < y1 and y0 < y + h), default=65535)
 
     def __repr__(self):
         return (f"x {self.x} y {self.y} vx {self.vx} vy {self.vy} st {self.st} "

@@ -7,12 +7,12 @@ tune fruit_min 0x0000ea60
 15 C / RJC
 1 C / RC
 30 C / RJC
-6 C / C
+112 C / C
 2 C / LC
 11 C / LJC
 1 C / LC
 21 C / LJC
-281 C / C
+175 C / C
 70 C / LC
 7 C / LJC
 1 C / LC
@@ -42,18 +42,18 @@ tune fruit_min 0x0000ea60
 27 C / RJC
 1 C / RC
 26 C / RJC
-203 C / C
+4 C / C
 49 C / RC
-30 C / RJC
+27 C / RJC
 1 C / RC
-31 C / RJC
+34 C / RJC
 4 C / C
 3 C / RC
 23 C / RJC
 8 C / C
 3 C / LC
 48 C / LJC
-220 C / C
+6 C / C
 73 C / LC
 7 C / LJC
 1 C / LC
@@ -68,7 +68,7 @@ tune fruit_min 0x0000ea60
 11 C / LJC
 1 C / LC
 21 C / LJC
-226 C / C
+219 C / C
 2 C / RC
 15 C / RJC
 1 C / RC
@@ -83,18 +83,18 @@ tune fruit_min 0x0000ea60
 27 C / RJC
 1 C / RC
 26 C / RJC
-203 C / C
+4 C / C
 49 C / RC
-30 C / RJC
+27 C / RJC
 1 C / RC
-31 C / RJC
+34 C / RJC
 4 C / C
 3 C / RC
 23 C / RJC
 8 C / C
 3 C / LC
 48 C / LJC
-220 C / C
+6 C / C
 12 C / LC
 27 C / LJC
 1 C / LC
@@ -109,7 +109,7 @@ tune fruit_min 0x0000ea60
 11 C / LJC
 1 C / LC
 20 C / LJC
-227 C / C
+220 C / C
 2 C / RC
 15 C / RJC
 1 C / RC
@@ -124,14 +124,14 @@ tune fruit_min 0x0000ea60
 27 C / RJC
 1 C / RC
 26 C / RJC
-203 C / C
+4 C / C
 49 C / RC
-30 C / RJC
+27 C / RJC
 1 C / RC
-31 C / RJC
+34 C / RJC
 4 C / C
 3 C / RC
 23 C / RJC
 430 C / C
-hash eddf3193
+hash 055f3d51
 kos 0 0
