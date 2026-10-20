@@ -39,7 +39,7 @@ Layouts below are in art px (before the stretch):
   slash     attack slash (tools/effects.py): 3 side frames of 16x24, 3 up
             frames of 24x16
   controls  N64 controller picture for the CONTROLS screen (tools/controls.py),
-            128x84
+            already at sim resolution (232x108, not stretched)
   platform  Rocky Roads cloud platforms halved (nearest), for one-way moving
             platforms 2, 3 and 4 cells wide: one 34x10 slot each, the cloud
             centered, its top on the slot's top row
@@ -218,7 +218,6 @@ def sheets():
     yield "hud", hearts.resize((hearts.width // 2, hearts.height // 2), Image.NEAREST)
     yield "font", font.sheet()
     yield "slash", effects.slash()
-    yield "controls", controls.pad()
     yield "platform", clouds()
 
 
@@ -244,7 +243,7 @@ def main():
     out = sys.argv[1]
     os.makedirs(os.path.join(out, "n64"), exist_ok=True)
     os.makedirs(os.path.join(out, "host"), exist_ok=True)
-    native = scenery.sheets()           # already at sim resolution
+    native = scenery.sheets() + [("controls", controls.pad())]     # already at sim resolution
     native += [("tiles_" + n, terrain.sheet(n)) for n in terrain.TILESETS]
     for name, im in [(n, im.resize((im.width * 2, im.height), Image.NEAREST))
                      for n, im in sheets()] + native:

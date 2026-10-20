@@ -583,8 +583,10 @@ static void draw_pause(const Game *g, const DrawApi *d)
 
 /* CONTROLS screen: the N64 controller (tools/controls.py) with leader lines
  * from its parts to two-line labels (part, action), and tips below. */
-#define PAD_X 192               /* picture's top-left, sim px (256x84) */
+#define PAD_X 204               /* picture's top-left, sim px */
 #define PAD_Y 46
+#define PAD_PIC_W 232           /* picture size, sim px (tools/controls.py W, H) */
+#define PAD_PIC_H 108
 #define LABEL_GAP 16            /* picture edge to labels */
 #define TINT_PART 0xd0d4e0
 #define TINT_A 0x6c9cff
@@ -598,13 +600,13 @@ typedef struct {
 } Callout;
 
 static const Callout callouts[] = {
-    {64, 26, 3, 0, 44, 0xff6060, "START", "PAUSE"},
-    {24, 30, 9, 0, 76, TINT_PART, "D-PAD", "MOVE"},
-    {64, 52, 9, 0, 108, TINT_PART, "STICK", "MOVE"},
-    {64, 72, 4, 0, 140, TINT_PART, "Z", "DASH"},
-    {108, 5, 4, 1, 51, TINT_PART, "R", "DASH"},
-    {98, 44, 6, 1, 90, TINT_A, "A", "JUMP"},
-    {88, 34, 5, 1, 122, TINT_B, "B", "ATTACK"},
+    {58, 41, 5, 0, 40, 0xff6060, "START", "PAUSE"},
+    {23, 36, 10, 0, 82, TINT_PART, "D-PAD", "MOVE"},
+    {58, 65, 9, 0, 114, TINT_PART, "STICK", "MOVE"},
+    {58, 88, 4, 0, 144, TINT_PART, "Z", "DASH"},
+    {104, 10, 3, 1, 56, TINT_PART, "R", "DASH"},
+    {78, 37, 4, 1, 88, TINT_B, "B", "ATTACK"},
+    {85, 46, 4, 1, 120, TINT_A, "A", "JUMP"},
 };
 
 /* A light line with a dark edge, horizontal or vertical, between two points. */
@@ -640,7 +642,7 @@ static void draw_controls(const Game *g, const DrawApi *d)
     for (unsigned i = 0; i < sizeof callouts / sizeof callouts[0]; i++) {
         const Callout *c = &callouts[i];
         int px = PAD_X + c->ax * 2, py = PAD_Y + c->ay, y = c->y;
-        int lx = c->right ? PAD_X + 256 + LABEL_GAP - 4 : PAD_X - LABEL_GAP + 4;
+        int lx = c->right ? PAD_X + PAD_PIC_W + LABEL_GAP - 4 : PAD_X - LABEL_GAP + 4;
         if (py == y) {          /* straight across, from the part's edge */
             leader(d, c->right ? px + c->r * 2 : px - c->r * 2, y, lx, y);
         } else {                /* down or up to the label's y, then across */
@@ -648,12 +650,12 @@ static void draw_controls(const Game *g, const DrawApi *d)
             leader(d, px, y, lx, y);
         }
     }
-    d->blit(d->ctx, SPR_CONTROLS, 0, 0, 256, 84, PAD_X, PAD_Y, 0);
+    d->blit(d->ctx, SPR_CONTROLS, 0, 0, PAD_PIC_W, PAD_PIC_H, PAD_X, PAD_Y, 0);
     /* Labels at the leader ends: the part above the line, the action below. */
     for (unsigned i = 0; i < sizeof callouts / sizeof callouts[0]; i++) {
         const Callout *c = &callouts[i];
         int wp = font_width(c->part, FONT_SMALL), wa = font_width(c->action, FONT_SMALL);
-        int x = c->right ? PAD_X + 256 + LABEL_GAP : PAD_X - LABEL_GAP;
+        int x = c->right ? PAD_X + PAD_PIC_W + LABEL_GAP : PAD_X - LABEL_GAP;
         font_text(g, d, c->right ? x : x - wp, c->y - th - 1, c->part, FONT_SMALL, c->tint, 0);
         font_text(g, d, c->right ? x : x - wa, c->y + 2, c->action, FONT_SMALL, TINT_WHITE, 0);
     }
