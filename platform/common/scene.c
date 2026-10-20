@@ -678,15 +678,24 @@ static void draw_countdown(const Game *g, const DrawApi *d)
 
 static void draw_winner(const Game *g, const DrawApi *d)
 {
-    int t = g->winner - 1;
+    int t = g->winner - 1, lh = font_h(FONT_LARGE), y;
     char a[16], b[16];
     dim(d);
-    font_center(g, d, 70, t == 0 ? "RED WINS!" : "BLUE WINS!", FONT_LARGE, TEAM_TINT[t], 1);
+    if (g->wins[t] >= MATCH_WINS) {     /* the match: laid out like the title screen */
+        font_center(g, d, 30, t == 0 ? "RED WINS" : "BLUE WINS", FONT_LARGE, TEAM_TINT[t], 1);
+        font_center(g, d, 30 + lh + 6, "THE MATCH!", FONT_LARGE, TEAM_TINT[t], 1);
+        y = 106;
+        if (!g->round_timer && ((g->frame / 30) & 1))
+            font_center(g, d, 170, "PRESS START", FONT_MEDIUM, TINT_WHITE, 0);
+    } else {
+        font_center(g, d, 70, t == 0 ? "RED WINS!" : "BLUE WINS!", FONT_LARGE, TEAM_TINT[t], 1);
+        y = 70 + lh + 20;
+    }
     /* Rounds won: RED n - m BLUE, each side in its team color. */
     snprintf(a, sizeof a, "RED %u ", (unsigned)g->wins[0]);
     snprintf(b, sizeof b, " %u BLUE", (unsigned)g->wins[1]);
     int wa = font_width(a, FONT_MEDIUM), wd = font_width("-", FONT_MEDIUM);
-    int x = (VIEW_W - wa - wd - font_width(b, FONT_MEDIUM)) / 2, y = 70 + font_h(FONT_LARGE) + 20;
+    int x = (VIEW_W - wa - wd - font_width(b, FONT_MEDIUM)) / 2;
     font_text(g, d, x, y, a, FONT_MEDIUM, TEAM_TINT[0], 0);
     font_text(g, d, x + wa, y, "-", FONT_MEDIUM, TINT_DIM, 0);
     font_text(g, d, x + wa + wd, y, b, FONT_MEDIUM, TEAM_TINT[1], 0);

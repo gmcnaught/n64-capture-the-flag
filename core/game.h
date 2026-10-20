@@ -14,6 +14,9 @@
  *     falls) and sends the carrier back to its start, without losing a pip;
  *   - a team wins the round with all of the other team's flags in its goal;
  *     after ROUND_END_FRAMES a new round starts.
+ *   - the first team to win MATCH_WINS rounds wins the match: the banner
+ *     stays up after ROUND_END_FRAMES until a playing player presses Start
+ *     or Jump, which opens the setup screen (a new match from there).
  *   - every round opens with a 3, 2, 1 countdown (COUNTDOWN_STEP frames
  *     each) with everything frozen; play starts on GO!, which stays on
  *     screen for COUNTDOWN_GO frames.
@@ -83,6 +86,7 @@
 #define FLAG_W 16               /* flag body: pole and cloth */
 #define FLAG_H 16
 #define ROUND_END_FRAMES 180
+#define MATCH_WINS 3            /* rounds won to win the match */
 #define COUNTDOWN_STEP 60       /* frames per number of the round countdown */
 #define COUNTDOWN_GO 40         /* frames GO! shows, in play */
 #define COUNTDOWN_FRAMES (3 * COUNTDOWN_STEP + COUNTDOWN_GO)
@@ -170,7 +174,7 @@ typedef struct {
     int16_t goal_x[TEAM_COUNT], goal_y[TEAM_COUNT], goal_w[TEAM_COUNT], goal_h[TEAM_COUNT];
     int16_t home_x0[TEAM_COUNT], home_y0[TEAM_COUNT], home_x1[TEAM_COUNT], home_y1[TEAM_COUNT];
     uint8_t winner;                 /* 0, or team + 1 while the round-end banner shows */
-    uint16_t round_timer;           /* frames left of the banner */
+    uint16_t round_timer;           /* frames left of the banner (0: match won, waiting) */
     uint8_t countdown;              /* frames left of the round countdown: frozen above COUNTDOWN_GO */
     uint16_t wins[TEAM_COUNT];
     uint8_t last_hit[MAX_PLAYERS][MAX_PLAYERS]; /* [player][opponent]: the opponent's

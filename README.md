@@ -27,7 +27,8 @@ plays with P1; P4, dark blue, with P2; teammates can't hit each other).
 Each team keeps three flags by its start.
 
 - **Steal** the other team's flags and carry them, one at a time, up to
-  your goal ledge. Get all three there to win the round.
+  your goal ledge. Get all three there to win the round. The first team
+  to win three rounds wins the match.
 - **Carriers** run slower and can't dash or attack. Kick a carrier and they
   drop the flag and go back to their start.
 - **Defend:** grab your own dropped flag and carry it home.

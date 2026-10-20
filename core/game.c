@@ -978,8 +978,15 @@ void game_tick(Game *g, const InputState in[MAX_PLAYERS])
         return;
     }
     if (g->winner) {                /* round-end banner: the sim waits */
-        if (--g->round_timer == 0)
+        if (g->round_timer && --g->round_timer)
+            return;
+        if (g->wins[g->winner - 1] < MATCH_WINS) {
             new_round(g);
+        } else if (any & (BTN_START | BTN_JUMP)) {  /* match won: on to the setup screen */
+            new_match(g);
+            g->title = TITLE_SETUP;
+            g->sfx |= SFX_BIT(SFX_MENU);
+        }
         return;
     }
     if (g->paused == PAUSE_CONTROLS) {  /* controls screen: back to the menu */

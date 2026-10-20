@@ -15,6 +15,9 @@ Every scenario first waits out the round countdown (3, 2, 1, GO!).
                 to the red goal; the third one wins the round, and the next
                 round starts after its countdown.
   capture_blue  The same for P2: the red flags into the blue goal.
+  match         P1 wins three rounds (capture) and so the match: the
+                banner stays up until P2's Start opens the setup screen
+                (rounds won reset); P1's Jump starts a new match.
   steal_drop    P1 waits right of the red flags; P2 takes one;
                 P1 walks up and kicks the carrier: the flag drops where P2
                 stood and P2 goes back to its start; P1 picks up its own
@@ -112,6 +115,7 @@ LEVELS = os.path.join(ROOT, "build", "assets", "levels")
 FLAGS = {0: [0, 1, 2], 1: [3, 4, 5]}     # Game.flags indices per team (entity order)
 COUNTDOWN = 3 * 60 + 40                 # COUNTDOWN_FRAMES (core/game.h)
 COUNTDOWN_GO = 40
+ROUND_END_FRAMES, MATCH_WINS = 180, 3  # core/game.h
 PLATFORM_WAIT, PLATFORM_RETRIES = 30, 12   # no route with moving platforms: wait, search again
 GUST_RETRIES = 10                       # gusts waited out before a route move fits a calm
 MOVE_MARGIN, JUMP_HEIGHT = 16, 80       # move_box: px beside a move's span, above its top
@@ -430,11 +434,8 @@ def sky_capture_blue():
     return capture_team(1, "sky.lvl")
 
 
-def capture_team(side, level="arena.lvl"):
+def win_round(b, side):
     """Player side captures the other team's three flags into its goal."""
-    b = Builder(NO_FRUIT.replace("arena.lvl", level))
-    countdown(b)
-    b.hold("C / C", 10)
     left = list(FLAGS[1 - side])
     goal = f"goal{side + 1}"
     for _ in range(3):
@@ -449,6 +450,14 @@ def capture_team(side, level="arena.lvl"):
     else:
         raise RuntimeError(f"no round win: {b.state()}")
     check(s.p[side].winner == side + 1, "wrong winner", s)
+    return s
+
+
+def capture_team(side, level="arena.lvl"):
+    b = Builder(NO_FRUIT.replace("arena.lvl", level))
+    countdown(b)
+    b.hold("C / C", 10)
+    win_round(b, side)
     b.hold("C / C", until=lambda s: s.p[0].winner == 0, limit=400)
     s = countdown(b)
     check(s.p[0].wins == (side == 0) and s.p[1].wins == (side == 1), "round win not counted", s)
@@ -458,6 +467,29 @@ def capture_team(side, level="arena.lvl"):
 
 def capture():
     return capture_team(0)
+
+
+def match():
+    b = Builder(NO_FRUIT)
+    for n in range(1, MATCH_WINS + 1):
+        countdown(b)
+        b.hold("C / C", 10)
+        s = win_round(b, 0)
+        check(s.p[0].wins == n, "round win not counted", s)
+        if n < MATCH_WINS:
+            b.hold("C / C", until=lambda s: s.p[0].winner == 0, limit=400)
+    s = b.hold("C / C", ROUND_END_FRAMES + 60)
+    check(s.p[0].winner == 1 and s.p[0].title == 0 and s.p[0].cd == 0,
+          "match end did not wait on the banner", s)
+    s = b.hold("C / SC", 1)
+    check(s.p[0].title == 2 and s.p[0].wins == 0 and s.p[0].winner == 0,
+          "Start did not open the setup screen", s)
+    b.hold("C / C", 1)
+    s = b.hold("JC / C", 1)
+    check(s.p[0].title == 0 and s.p[0].cd == COUNTDOWN, "Jump did not start a new match", s)
+    countdown(b)
+    b.hold("C / C", 30)
+    return b
 
 
 def capture_blue():
@@ -724,7 +756,7 @@ def team_flags():
 def main():
     os.makedirs(OUT, exist_ok=True)
     docs = __doc__.split("\n  ")
-    scenarios = (capture, capture_blue, steal_drop, duel, stack, water, menu, ice_slide,
+    scenarios = (capture, capture_blue, match, steal_drop, duel, stack, water, menu, ice_slide,
                  snow_capture, snow_capture_blue, wind_gust, wind_drop, desert_capture,
                  desert_capture_blue, platform_ride, platform_squish, platform_push, sky_capture,
                  sky_capture_blue, lava_geyser, lava_capture, lava_capture_blue, team_hits,
