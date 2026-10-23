@@ -37,6 +37,13 @@
  * Frame log: built with -DFRAME_LOG (make hw FRAME_LOG=1), logs every frame
  * that missed 60 Hz over USB (debugf; UNFLoader shows it), with the times
  * of its parts, and every 2 s the worst of each.
+ *
+ * SD log: unless built with NDEBUG, debugf also goes to sd:/libdragon.log
+ * (libdragon's DEBUG_FEATURE_LOG_SD, appended). libdragon's FAT writes a
+ * file's size only when it is closed (log_close): on RESET (a handler; the
+ * ModRetro M64's Reset Core did not call it), on C-left + C-right held (the
+ * screen turns green when done, then press RESET), and at the end of the
+ * replay test. Power off loses it.
  */
 #include <malloc.h>
 #include <stdio.h>
@@ -92,6 +99,33 @@ static void flog_rdp(void *start)
 #define FLOG_MARK(i) ((void)0)
 #endif
 
+#ifndef NDEBUG
+/* Shown on log_close (RGBA16): red when it starts, green once the log is
+ * closed; the main loop then shows it until the reset. */
+static volatile uint16_t reset_color;
+
+static void fill_screen(surface_t fb, uint16_t color)
+{
+    for (int y = 0; y < fb.height; y++) {
+        uint16_t *row = UncachedAddr((uint8_t *)fb.buffer + y * fb.stride);
+        for (int x = 0; x < fb.width; x++)
+            row[x] = color;
+    }
+}
+
+/* Closes the SD log, with every stdio file; a later debugf write to it
+ * fails. Also the RESET handler (under interrupt, so libdragon's display
+ * cannot stop the game during it). */
+static void log_close(void)
+{
+    if (reset_color)
+        return;
+    fill_screen(display_get_current_framebuffer(), reset_color = 0xF801);
+    _fcloseall_r(_REENT);       /* fcloseall: not declared by stdio.h here */
+    fill_screen(display_get_current_framebuffer(), reset_color = 0x07C1);
+}
+#endif
+
 static sprite_t *sprites[SPR_COUNT];
 static char level_names[MAX_LEVELS][64];
 static int level_count, level_index = -1;
@@ -137,6 +171,7 @@ static void load_level(int i)
     level_data = data;
     int err = level_load(&level, data, (uint32_t)size);
     assertf(err == 0, "%s: bad level data (%d)", path, err);
+    (void)err;                  /* NDEBUG */
     level.name = level_names[i];
     level_index = i;
 }
@@ -316,6 +351,7 @@ static void load_backdrop_sheet(int spr, const char *path)
     bool ok = asset_loadf_into(f, &sz, backdrop_buf[spr], &size);
     fclose(f);
     assertf(ok, "%s needs %d bytes", path, size);
+    (void)ok;                   /* NDEBUG */
     sprites[spr] = sprite_load_buf(backdrop_buf[spr], sz);
 }
 
@@ -601,6 +637,9 @@ static void autotest(const char *list)
            (unsigned long)g_frame_us_max, (unsigned long)g_busy_us_max,
            (unsigned long)(g_busy_at >> 16), (unsigned long)(g_busy_at & 0xffff), (unsigned long)g_repeats);
     g_autotest_done = 0x600DF00D;
+#ifndef NDEBUG
+    log_close();
+#endif
 
     while (1) {
         sound_update(0, 0);         /* music off on the results screen */
@@ -765,6 +804,12 @@ int main(void)
 {
     debug_init_emulog();
     debug_init_usblog();
+#ifndef NDEBUG
+    bool sd = debug_init(DEBUG_FEATURE_FILE_SD | DEBUG_FEATURE_LOG_SD);
+    if (sd)
+        register_RESET_handler(log_close);
+    debugf("--- boot, SD log %s\n", sd ? "open" : "unavailable");
+#endif
 
     selftest_hash = core_selftest();
     g_selftest_hash = selftest_hash;
@@ -773,7 +818,12 @@ int main(void)
     debugf("core_selftest=%08lx %s\n", (unsigned long)selftest_hash,
            selftest_pass ? "PASS" : "FAIL");
 
-    assertf(get_memory_size() >= 8 << 20, "Capture The Flag needs the Expansion Pak (8 MB)");
+    if (get_memory_size() < 8 << 20) {  /* not assertf: NDEBUG drops those */
+        console_init();
+        printf("Capture The Flag needs the Expansion Pak (8 MB)\n");
+        console_render();
+        while (1) {}
+    }
     dfs_init(DFS_DEFAULT_LOCATION);
     joypad_init();
     /* 640x240 progressive; the VI resample filter can artifact above 400
@@ -816,6 +866,13 @@ int main(void)
         FLOG_MARK(0);
         surface_t *disp = display_get();
         FLOG_MARK(1);
+#ifndef NDEBUG
+        if (reset_color) {      /* log closed: keep its color on screen */
+            fill_screen(*disp, reset_color);
+            display_show(disp);
+            while (1) {}
+        }
+#endif
 #ifdef FRAME_LOG
         flog_frame();
 #endif
@@ -831,6 +888,11 @@ int main(void)
         }
         if (pressed.c_up)
             debug = !debug;
+#ifndef NDEBUG
+        joypad_buttons_t held = joypad_get_buttons_held(JOYPAD_PORT_1);
+        if (held.c_left && held.c_right)
+            log_close();
+#endif
 
         InputState in[MAX_PLAYERS];
         for (int t = 0; t < MAX_PLAYERS; t++)

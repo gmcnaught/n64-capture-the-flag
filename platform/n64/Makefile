@@ -14,6 +14,12 @@ include $(N64_INST)/include/n64.mk
 
 COMMON_DIR := ../common
 N64_CFLAGS += -I$(CORE_DIR) -I$(COMMON_DIR) $(EXTRA_CFLAGS)
+# The release ROM (ctf.z64) is built with NDEBUG: libdragon drops debugf,
+# assertf and the SD log (src/main.c). The replay-test (ctf-test) and
+# frame-log (ctf-log) ROMs keep them.
+ifeq ($(ROMNAME),ctf)
+  N64_CFLAGS += -DNDEBUG
+endif
 
 all: $(ROMNAME).z64
 .PHONY: all
