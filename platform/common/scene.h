@@ -28,7 +28,8 @@ int scene_tileset(const Level *lv);
 
 enum { FLIP_X = 1, FLIP_Y = 2 };
 
-/* Text glyphs are 8x8 art px: 16 sim px wide, 8 tall. */
+/* The platforms' debug text (overlays): 8x8 art px glyphs, 16 sim px wide,
+ * 8 tall. The game's own text uses the display font (scene.c). */
 #define TEXT_CW 16
 #define TEXT_CH 8
 
@@ -45,8 +46,6 @@ typedef struct {
                       uint32_t rgb);
     /* Fill a rectangle; color 0xRRGGBBAA, alpha-blended when AA < 0xff. */
     void (*fill)(void *ctx, int x, int y, int w, int h, uint32_t rgba);
-    /* Text at (x, y), TEXT_CW x TEXT_CH per character. */
-    void (*text)(void *ctx, int x, int y, const char *s);
     void *ctx;
     /* Optional: draws the CONTROLS screen's layer (scene_draw_controls)
      * some other way, e.g. from a buffer it was drawn into once. NULL:

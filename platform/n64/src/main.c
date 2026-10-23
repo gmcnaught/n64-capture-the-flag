@@ -271,7 +271,7 @@ static void d_controls(void *ctx)
     rdpq_tex_blit(&controls_layer, 0, 0, NULL);
 }
 
-static const DrawApi draw_api = {d_blit, d_blit_tint, d_fill, d_text, NULL, d_controls};
+static const DrawApi draw_api = {d_blit, d_blit_tint, d_fill, NULL, d_controls};
 
 /* ---- frame ---------------------------------------------------------------- */
 

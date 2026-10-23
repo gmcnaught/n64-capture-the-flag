@@ -447,29 +447,6 @@ static void draw_slash(const Game *g, const DrawApi *d, int i)
     }
 }
 
-/* ---- HUD -------------------------------------------------------------------- */
-
-static void draw_hud(const Game *g, const DrawApi *d)
-{
-    char l[16];
-    for (int k = 0; k < g->player_count; k++) {
-        const Player *p = &g->players[k];
-        int t = game_team(k);
-        /* P1 top-left, P2 top-right, inside the safe area: hearts, then the
-         * team's rounds won; P3 and P4's hearts below. */
-        int x0 = t == 0 ? SAFE_X : VIEW_W - SAFE_X - PLAYER_HEALTH * (HEART_W + 4);
-        for (int i = 0; i < PLAYER_HEALTH; i++)
-            d->blit(d->ctx, SPR_HUD, (i < p->health ? 0 : 3) * HEART_W, 0, HEART_W, HEART_H,
-                    x0 + i * (HEART_W + 4), SAFE_Y + k / TEAM_COUNT * (HEART_H + 3), 0);
-        if (k >= TEAM_COUNT)
-            continue;
-        snprintf(l, sizeof l, "%u", (unsigned)g->wins[t]);
-        int tx = t == 0 ? x0 + PLAYER_HEALTH * (HEART_W + 4) + 8
-                        : x0 - 8 - (int)strlen(l) * TEXT_CW;
-        d->text(d->ctx, tx, SAFE_Y, l);
-    }
-}
-
 /* ---- display font ------------------------------------------------------------ */
 
 enum { FONT_MEDIUM, FONT_LARGE, FONT_SMALL };   /* font_sizes[] in font_glyphs.h */
@@ -529,6 +506,30 @@ static void font_center(const Game *g, const DrawApi *d, int y, const char *s, i
                         uint32_t tint, int wave)
 {
     font_text(g, d, (VIEW_W - font_width(s, size)) / 2, y, s, size, tint, wave);
+}
+
+/* ---- HUD -------------------------------------------------------------------- */
+
+static void draw_hud(const Game *g, const DrawApi *d)
+{
+    char l[16];
+    for (int k = 0; k < g->player_count; k++) {
+        const Player *p = &g->players[k];
+        int t = game_team(k);
+        /* P1 top-left, P2 top-right, inside the safe area: hearts, then the
+         * team's rounds won; P3 and P4's hearts below. */
+        int x0 = t == 0 ? SAFE_X : VIEW_W - SAFE_X - PLAYER_HEALTH * (HEART_W + 4);
+        for (int i = 0; i < PLAYER_HEALTH; i++)
+            d->blit(d->ctx, SPR_HUD, (i < p->health ? 0 : 3) * HEART_W, 0, HEART_W, HEART_H,
+                    x0 + i * (HEART_W + 4), SAFE_Y + k / TEAM_COUNT * (HEART_H + 3), 0);
+        if (k >= TEAM_COUNT)
+            continue;
+        snprintf(l, sizeof l, "%u", (unsigned)g->wins[t]);
+        int tx = t == 0 ? x0 + PLAYER_HEALTH * (HEART_W + 4) + 8
+                        : x0 - 8 - font_width(l, FONT_SMALL);
+        font_text(g, d, tx, SAFE_Y + (HEART_H - font_h(FONT_SMALL)) / 2, l, FONT_SMALL,
+                  TINT_WHITE, 0);
+    }
 }
 
 /* ---- screens (title, pause menu, controls, round winner, countdown) ------------ */
