@@ -637,8 +637,14 @@ int sound_open(const char *dir)
 {
     char path[64];
     (void)dir;
-    audio_init(22050, 4);
+    /* Output buffers of 368 samples (a 60 Hz frame at 22047 Hz), 4 of them:
+     * mixer_try_play mixes one buffer nearly every frame instead of a
+     * 512-sample one on 7 frames in 10, and refilling after a stall (a
+     * level load) mixes 3 buffers, not 6. mixer_init sets its own 512
+     * granularity, so this one comes after it. */
+    audio_init(22050, AUDIO_INIT_LATENCY_MS(80));
     mixer_init(MIXER_MAX_CHANNELS);
+    audio_set_buffer_granularity(368);
     for (int i = 0; i < SFX_COUNT; i++) {
         snprintf(path, sizeof path, "rom:/%s.wav64", audio_sfx_names[i]);
         wav64_open(&sfx_wav[i], path);

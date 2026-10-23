@@ -79,7 +79,7 @@ $(FS_DIR)/font.sprite \
 $(FS_DIR)/%.wav64: $(ASSETS_DIR)/audio/%.wav
 	@mkdir -p $(dir $@)
 	@echo "    [AUDIO] $@"
-	$(N64_AUDIOCONV) --wav-compress 1 -o $(FS_DIR) "$<"
+	$(N64_AUDIOCONV) --wav-compress 1,huffman=false -o $(FS_DIR) "$<"
 
 $(FS_DIR)/%.xm64: $(MUSIC_DIR)/%.xm
 	@mkdir -p $(dir $@)
