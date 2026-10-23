@@ -13,6 +13,10 @@
 #                   changes call for (tools/check_select.py), read from ares (headless);
 #                   FULL=1 or `make check-full`: every replay; ONLY="a b": those
 #   make deploy     copy the N64 ROM + replay-test ROM to each MiSTer in MISTER_HOSTS (checksum-verified)
+#   make hw         upload the N64 ROM to a USB flashcart (SummerCart64, 64drive, EverDrive)
+#                   with UNFLoader, boot it and show its debugf output (Ctrl-C quits; also
+#                   in build/hw.log); FRAME_LOG=1: the ROM logs every frame that missed 60 Hz
+#   make hw-test    the same with the replay-test ROM (every replay; results in the log)
 #
 # N64_INST defaults to ~/opt/libdragon (libdragon, preview branch).
 N64_INST ?= $(HOME)/opt/libdragon
@@ -114,8 +118,24 @@ deploy: n64
 	  done; \
 	done
 
+# UNFLoader: https://github.com/buu342/N64-UNFLoader (UNF_FLAGS=-b: no
+# full-screen terminal UI, e.g. when the output is piped).
+UNFLOADER ?= $(HOME)/opt/unfloader/UNFLoader
+UNF_FLAGS ?=
+HW_ROM := $(if $(FRAME_LOG),ctf-log,ctf)
+
+hw: n64
+	$(if $(FRAME_LOG),$(MAKE) -C platform/n64 ROMNAME=ctf-log BUILD_DIR=build-log EXTRA_CFLAGS=-DFRAME_LOG)
+	@mkdir -p build
+	$(UNFLOADER) $(UNF_FLAGS) -r platform/n64/$(HW_ROM).z64 -d build/hw.log
+
+hw-test: n64
+	$(MAKE) -C platform/n64 test
+	@mkdir -p build
+	$(UNFLOADER) $(UNF_FLAGS) -r platform/n64/ctf-test.z64 -d build/hw-test.log
+
 clean:
 	$(MAKE) -C platform/host clean
 	$(MAKE) -C platform/n64 clean
 
-.PHONY: all host n64 selftest check check-full assets arena run test replay-update deploy clean
+.PHONY: all host n64 selftest check check-full assets arena run test replay-update deploy hw hw-test clean

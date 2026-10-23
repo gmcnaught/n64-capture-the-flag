@@ -48,10 +48,19 @@ typedef struct {
     /* Text at (x, y), TEXT_CW x TEXT_CH per character. */
     void (*text)(void *ctx, int x, int y, const char *s);
     void *ctx;
+    /* Optional: draws the CONTROLS screen's layer (scene_draw_controls)
+     * some other way, e.g. from a buffer it was drawn into once. NULL:
+     * scene_draw draws it. */
+    void (*controls)(void *ctx);
 } DrawApi;
 
 /* Sky and drifting clouds, drawn first every frame. */
 void scene_draw_sky(const Game *g, const DrawApi *d);
+/* The sky's scroll step (it moves 1 px per step, every 4 frames not
+ * paused), and its rows y0 .. y1 - 1 drawn at any step: the N64 draws the
+ * next step's sky ahead of time. */
+int scene_sky_step(const Game *g);
+void scene_draw_sky_rows(const Game *g, const DrawApi *d, int step, int y0, int y1);
 /* The parts that do not change during a game (mountains, trees, tile
  * layers, goal stands), over the sky with transparent gaps: the N64 draws
  * them once per level into a buffer and copies it every frame. */
@@ -59,5 +68,8 @@ void scene_draw_background(const Game *g, const DrawApi *d);
 /* Everything else (moving platforms first), over the background. debug:
  * collision overlay and hitboxes. */
 void scene_draw(const Game *g, const DrawApi *d, int debug);
+/* The CONTROLS screen's picture, lines and text, without the dimmed game
+ * under it: always the same pixels, and only opaque ones. */
+void scene_draw_controls(const Game *g, const DrawApi *d);
 
 #endif

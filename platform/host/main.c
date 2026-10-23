@@ -326,7 +326,7 @@ static void d_text(void *ctx, int x, int y, const char *s)
     SDL_SetRenderScale(ren, 1, 1);
 }
 
-static const DrawApi draw_api = {d_blit, d_blit_tint, d_fill, d_text, NULL};
+static const DrawApi draw_api = {d_blit, d_blit_tint, d_fill, d_text, NULL, NULL};
 
 static void text_bg(int x, int y, const char *s)
 {

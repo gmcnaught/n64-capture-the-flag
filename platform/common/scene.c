@@ -69,11 +69,25 @@ static void outline(const DrawApi *d, int x, int y, int w, int h, uint32_t c)
  * every 4 frames, stopped while paused (render only: it reads Game.anim
  * and never feeds back into the sim). The scenery below covers the rest
  * of the screen. */
+int scene_sky_step(const Game *g)
+{
+    return (int)(g->anim / 4);
+}
+
+void scene_draw_sky_rows(const Game *g, const DrawApi *d, int step, int y0, int y1)
+{
+    int s = step % SKY_W, h = backdrop_sky_h[g->backdrop];
+    if (y1 > h)
+        y1 = h;
+    if (y0 >= y1)
+        return;
+    for (int x = -s; x < VIEW_W; x += SKY_W)
+        d->blit(d->ctx, SPR_SKY, 0, y0, SKY_W, y1 - y0, x, y0, 0);
+}
+
 void scene_draw_sky(const Game *g, const DrawApi *d)
 {
-    int s = (int)(g->anim / 4 % SKY_W), h = backdrop_sky_h[g->backdrop];
-    for (int x = -s; x < VIEW_W; x += SKY_W)
-        d->blit(d->ctx, SPR_SKY, 0, 0, SKY_W, h, x, 0, 0);
+    scene_draw_sky_rows(g, d, scene_sky_step(g), 0, VIEW_H);
 }
 
 static void draw_backdrop(const DrawApi *d)
@@ -612,7 +626,8 @@ static void draw_pause(const Game *g, const DrawApi *d)
 }
 
 /* CONTROLS screen: the N64 controller (tools/controls.py) with leader lines
- * from its parts to two-line labels (part, action), and tips below. */
+ * from its parts to two-line labels (part, action), and tips below, over
+ * the dimmed game (scene_draw). */
 #define PAD_X 204               /* picture's top-left, sim px */
 #define PAD_Y 46
 #define PAD_PIC_W 232           /* picture size, sim px (tools/controls.py W, H) */
@@ -653,7 +668,7 @@ static void leader(const DrawApi *d, int x0, int y0, int x1, int y1)
     }
 }
 
-static void draw_controls(const Game *g, const DrawApi *d)
+void scene_draw_controls(const Game *g, const DrawApi *d)
 {
     static const char *const tips[] = {
         "A IN THE AIR: DOUBLE JUMP",
@@ -663,7 +678,6 @@ static void draw_controls(const Game *g, const DrawApi *d)
         "CARRYING A FLAG: NO DASH OR ATTACK",
     };
     int th = font_h(FONT_SMALL);
-    dim(d);
     font_center(g, d, 6, "CONTROLS", FONT_MEDIUM, TINT_GOLD, 0);
     int bw = font_width("B BACK", FONT_SMALL);      /* any of A, B, Start goes back */
     font_text(g, d, VIEW_W - SAFE_X - bw, 10, "B", FONT_SMALL, TINT_B, 0);
@@ -800,8 +814,13 @@ void scene_draw(const Game *g, const DrawApi *d, int debug)
     draw_hud(g, d);
     if (g->winner)
         draw_winner(g, d);
-    else if (g->paused == PAUSE_CONTROLS)
-        draw_controls(g, d);
+    else if (g->paused == PAUSE_CONTROLS) {
+        dim(d);
+        if (d->controls)
+            d->controls(d->ctx);
+        else
+            scene_draw_controls(g, d);
+    }
     else if (g->paused)
         draw_pause(g, d);
     else if (g->countdown)

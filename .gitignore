@@ -6,6 +6,7 @@ build-check.log
 .venv/
 platform/n64/filesystem/
 platform/n64/build-test/
+platform/n64/build-log/
 .remember/
 new-assets/**/__MACOSX/
 # Not redistributable: Craftpix license forbids sharing the art files;

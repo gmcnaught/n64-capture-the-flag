@@ -7,6 +7,9 @@ export N64_INST
 ifeq ($(wildcard $(N64_INST)/include/n64.mk),)
   $(error $(N64_INST)/include/n64.mk does not exist: build libdragon first (make -C ../.. libdragon))
 endif
+# 8 MB: the 4 MB console runs out of memory (sprite sheets, framebuffers
+# and the composite buffers in src/main.c).
+N64_ROM_EXPANSIONPAK = required
 include $(N64_INST)/include/n64.mk
 
 COMMON_DIR := ../common
@@ -109,7 +112,7 @@ test:
 
 
 clean:
-	$(RM) -r $(BUILD_DIR) build-test $(FS_DIR) *.z64
+	$(RM) -r $(BUILD_DIR) build-test build-log $(FS_DIR) *.z64
 .PHONY: clean test FORCE
 
 ifneq ($(wildcard $(BUILD_DIR)),)

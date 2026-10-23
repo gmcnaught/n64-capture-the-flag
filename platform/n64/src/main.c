@@ -3,14 +3,19 @@
  * through rdpq. Sheets are built at sim resolution, so blits are 1:1 and
  * unflipped ones use copy mode. The mountains, trees and tile layers (up
  * to 1200 tiles) are drawn once per level into a 640x240 buffer with
- * transparent gaps; each frame draws the sky and drifting clouds, then
- * copies the buffer over them (copy mode skips its transparent texels).
+ * transparent gaps. The sky and its drifting clouds move 1 px every 4
+ * frames (a sky step), so the sky with that buffer over it (copy mode skips
+ * its transparent texels) is composited into a third buffer, which each
+ * frame copies whole; the next step's is drawn into a fourth buffer a
+ * quarter per frame meanwhile, and the two swap on the step. A step only
+ * changes the sky's band of rows that are not one color across (sky_band:
+ * 61 to 112 of 240), so only that band is redrawn.
  * Only the current backdrop's sky and scenery sheets and the level's
  * tileset sheet are in memory: a backdrop or stage change on the title
- * screen reloads them and rebuilds the buffer. The CONTROLS screen (its
- * text alone takes about a frame of CPU) is drawn once into a second
- * buffer when it opens and copied while it stays: nothing under it moves
- * while paused (Game.anim).
+ * screen reloads them and rebuilds the buffer. The CONTROLS screen's
+ * picture, lines and text (the text alone takes about a frame of CPU) are
+ * drawn once at boot into a second buffer with transparent gaps, which is
+ * copied over the dimmed game while the screen is open.
  *
  * Controllers 1 to 4 (P1 .. P4; P3 and P4 play when the setup screen's
  * PLAYERS says so): stick/D-pad move, A jump, Z or R dash, B attack,
@@ -27,6 +32,10 @@
  * at boot, every replay in rom:/replays.txt. Each runs with rendering and
  * sound on and its final game_hash/kos are compared with the host-recorded
  * values.
+ *
+ * Frame log: built with -DFRAME_LOG (make hw FRAME_LOG=1), logs every frame
+ * that missed 60 Hz over USB (debugf; UNFLoader shows it), with the times
+ * of its parts, and every 2 s the worst of each.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,7 +60,7 @@ volatile uint32_t g_game_hash;      /* game_hash() after the last tick */
 volatile uint32_t g_last_fb;        /* framebuffer of the last frame (ares_read.py --dump) */
 volatile uint32_t g_frame_us;       /* last loop time, us (16683 = 60 Hz) */
 volatile uint32_t g_frame_us_max;   /* worst loop time after the first 60 frames */
-volatile uint32_t g_busy_us_max;    /* replay test: worst CPU + RDP time per frame */
+volatile uint32_t g_busy_us_max;    /* replay test: worst tick + CPU + RDP time per frame */
 volatile uint32_t g_busy_at;        /* where: replay index << 16 | game frame */
 static int autotest_replay;
 volatile uint32_t g_repeats;        /* vblanks that re-showed the same framebuffer while measuring */
@@ -59,6 +68,27 @@ static volatile bool measuring;     /* count repeated frames (set during replays
 volatile uint32_t g_replays_run, g_replays_passed;
 volatile uint32_t g_autotest_done;  /* 0x600DF00D when the replay test finished */
 volatile uint32_t g_music_chs;      /* music mixer channels playing (bit per channel from SFX_VOICES) */
+
+#ifdef FRAME_LOG
+/* t: ticks at the loop's marks (FLOG_MARK): 0 top, 1 buffer free, 2 tick
+ * done, 3 sound done, 4 render queued. rdp_us: mark 1 to the RDP finishing
+ * the frame (render's sync callback), of the last frame it finished: with
+ * two buffers, the previous frame can still be drawing at mark 1. */
+static struct {
+    uint32_t t[5], prev, n, slow;
+    uint32_t worst[5];          /* interval, wait, tick+sound+render CPU, RDP, sound */
+} flog;
+static volatile uint32_t flog_rdp_us, flog_rdp_worst;
+static void flog_rdp(void *start)
+{
+    flog_rdp_us = TICKS_TO_US(TICKS_READ() - (uint32_t)start);
+    if (flog_rdp_us > flog_rdp_worst)
+        flog_rdp_worst = flog_rdp_us;
+}
+#define FLOG_MARK(i) (flog.t[i] = TICKS_READ())
+#else
+#define FLOG_MARK(i) ((void)0)
+#endif
 
 static sprite_t *sprites[SPR_COUNT];
 static char level_names[MAX_LEVELS][64];
@@ -232,7 +262,16 @@ static void d_text(void *ctx, int x, int y, const char *s)
     rmode = RMODE_NONE;         /* rdpq_text changes the render mode */
 }
 
-static const DrawApi draw_api = {d_blit, d_blit_tint, d_fill, d_text, NULL};
+static surface_t controls_layer;   /* scene_draw_controls, over alpha 0 */
+
+static void d_controls(void *ctx)
+{
+    (void)ctx;
+    use_mode(RMODE_COPY);
+    rdpq_tex_blit(&controls_layer, 0, 0, NULL);
+}
+
+static const DrawApi draw_api = {d_blit, d_blit_tint, d_fill, d_text, NULL, d_controls};
 
 /* ---- frame ---------------------------------------------------------------- */
 
@@ -253,6 +292,23 @@ static void load_sheet(int spr)
 
 /* Swap in the sheets of the game's backdrop and tileset if they changed
  * (after the RDP is done with the old ones). */
+/* The sky's rows from the first one that is not a single color: the rows
+ * above look the same at every scroll step. */
+static int sky_band;
+
+static void find_sky_band(void)
+{
+    surface_t px = sprite_get_pixels(sprites[SPR_SKY]);
+    for (sky_band = 0; sky_band < px.height; sky_band++) {
+        const uint16_t *row = (const uint16_t *)((const uint8_t *)px.buffer + sky_band * px.stride);
+        int x = 1;
+        while (x < px.width && row[x] == row[0])
+            x++;
+        if (x < px.width)
+            break;
+    }
+}
+
 static void load_level_sheets(void)
 {
     int tileset = scene_tileset(&game.lv);
@@ -262,6 +318,7 @@ static void load_level_sheets(void)
     if (sprites_backdrop != game.backdrop) {
         load_sheet(SPR_SKY);
         load_sheet(SPR_SCENERY);
+        find_sky_band();
     }
     if (sprites_tileset != tileset)
         load_sheet(SPR_TILES);
@@ -272,27 +329,26 @@ static void load_level_sheets(void)
 
 static bool selftest_pass, debug;
 
-static surface_t controls_frame;
-static bool controls_cached;            /* controls_frame holds the CONTROLS screen */
-
-static void draw_frame(void)
+static void build_controls_layer(void)
 {
+    controls_layer = surface_alloc(FMT_RGBA16, VIEW_W, VIEW_H);
+    rdpq_attach(&controls_layer, NULL);
+    rdpq_clear(RGBA32(0, 0, 0, 0));
     rmode = RMODE_NONE;
-    scene_draw_sky(&game, &draw_api);
-    use_mode(RMODE_COPY);
-    rdpq_tex_blit(&background, 0, 0, NULL);
-    scene_draw(&game, &draw_api, debug);
+    scene_draw_controls(&game, &draw_api);
+    rdpq_detach_wait();
 }
 
-static void cache_controls(void)
-{
-    if (!controls_frame.buffer)
-        controls_frame = surface_alloc(FMT_RGBA16, VIEW_W, VIEW_H);
-    rdpq_attach(&controls_frame, NULL);
-    draw_frame();
-    rdpq_detach_wait();
-    controls_cached = true;
-}
+/* Sky composites: sky_buf[i] holds sky step sky_step[i] (-1: none) with
+ * the background over it, in the quarters of the band set in sky_rows[i].
+ * sky_clean[i]: drawn whole since the background was drawn (from black, so
+ * that below the sky, where the background is transparent, it is black),
+ * so the rows outside the band are right for every step. */
+#define SKY_PARTS 4
+static surface_t sky_buf[2];
+static int sky_step[2] = {-1, -1};
+static uint8_t sky_rows[2];
+static bool sky_clean[2];
 
 static void build_background(void)
 {
@@ -304,6 +360,66 @@ static void build_background(void)
     scene_draw_background(&game, &draw_api);
     rdpq_detach_wait();
     background_level = level_index;
+    sky_step[0] = sky_step[1] = -1;
+    sky_clean[0] = sky_clean[1] = false;
+}
+
+/* Draw quarter part of sky step's band into composite i, or all of it if
+ * it is not clean (queued, not waited for). */
+static void sky_part(int i, int step, int part)
+{
+    enum { ALL = (1 << SKY_PARTS) - 1 };
+    if (sky_step[i] != step) {
+        sky_step[i] = step;
+        sky_rows[i] = 0;
+    }
+    int y0 = 0, y1 = VIEW_H;
+    if (sky_clean[i]) {
+        int h = sprites[SPR_SKY]->height - sky_band;
+        y0 = sky_band + part * h / SKY_PARTS;
+        y1 = sky_band + (part + 1) * h / SKY_PARTS;
+        rdpq_attach(&sky_buf[i], NULL);
+        sky_rows[i] |= (uint8_t)(1 << part);
+    } else {
+        rdpq_attach_clear(&sky_buf[i], NULL);
+        sky_clean[i] = true;
+        sky_rows[i] = ALL;
+    }
+    if (y0 < y1) {
+        rmode = RMODE_NONE;
+        scene_draw_sky_rows(&game, &draw_api, step, y0, y1);
+        use_mode(RMODE_COPY);
+        rdpq_tex_blit(&background, 0, y0, &(rdpq_blitparms_t){.t0 = y0, .width = VIEW_W, .height = y1 - y0});
+    }
+    rdpq_detach();
+}
+
+/* The composite of the game's sky step, complete (drawn whole if the one
+ * drawn ahead is missing or unfinished: after a load or a jump of
+ * Game.anim); then a quarter of the next step's into the other one. */
+static surface_t *sky_composite(void)
+{
+    enum { ALL = (1 << SKY_PARTS) - 1 };
+    if (!sky_buf[0].buffer)
+        for (int i = 0; i < 2; i++) {
+            sky_buf[i] = surface_alloc(FMT_RGBA16, VIEW_W, VIEW_H);
+            assertf(sky_buf[i].buffer, "out of memory for the sky composites");
+        }
+    int step = scene_sky_step(&game);
+    int cur = sky_step[1] == step;
+    if (sky_step[cur] != step) {
+        sky_step[cur] = step;
+        sky_rows[cur] = 0;
+    }
+    for (int part = 0; part < SKY_PARTS; part++)
+        if (!(sky_rows[cur] & (1 << part)))
+            sky_part(cur, step, part);
+    int next = !cur;
+    if (sky_step[next] != step + 1 || sky_rows[next] != ALL) {
+        int part = sky_step[next] == step + 1 ? __builtin_ctz(~sky_rows[next] & ALL) : 0;
+        sky_part(next, step + 1, part);
+    }
+    return &sky_buf[cur];
 }
 
 static uint32_t selftest_hash;
@@ -319,28 +435,20 @@ static void text(int x, int y, const char *fmt, ...)
     d_text(NULL, x, y, buf);
 }
 
-/* Draw the game; returns after the frame is queued (or, with wait, after
- * the RDP finished it). */
-static void render(const char *status, bool wait)
+/* Draw the game into disp (from display_get); returns after the frame is
+ * queued (or, with wait, after the RDP finished it). */
+static void render(surface_t *disp, const char *status, bool wait)
 {
     load_level_sheets();
     if (background_level != level_index)
         build_background();
-    if (game.paused != PAUSE_CONTROLS)
-        controls_cached = false;
-    else if (!controls_cached)
-        cache_controls();
-    surface_t *disp = display_get();
-    uint32_t start = TICKS_READ();
+    surface_t *sky = sky_composite();
     g_last_fb = (uint32_t)disp->buffer;
     rdpq_attach(disp, NULL);
-    if (controls_cached) {
-        rdpq_set_mode_copy(false);      /* every texel, whatever its alpha bit */
-        rmode = RMODE_NONE;
-        rdpq_tex_blit(&controls_frame, 0, 0, NULL);
-    } else {
-        draw_frame();
-    }
+    rdpq_set_mode_copy(false);          /* every texel, whatever its alpha bit */
+    rmode = RMODE_NONE;
+    rdpq_tex_blit(sky, 0, 0, NULL);
+    scene_draw(&game, &draw_api, debug);
 
     if (!selftest_pass || debug)
         text(VIEW_W - TEXT_CW * 17, VIEW_H - 12, "ST %08lx %s", (unsigned long)selftest_hash,
@@ -357,13 +465,11 @@ static void render(const char *status, bool wait)
     }
     if (wait) {
         rdpq_detach_wait();
-        uint32_t busy = TICKS_TO_US(TICKS_READ() - start);
-        if (busy > g_busy_us_max) {
-            g_busy_us_max = busy;
-            g_busy_at = (uint32_t)autotest_replay << 16 | (game.frame & 0xffff);
-        }
         display_show(disp);
     } else {
+#ifdef FRAME_LOG
+        rdpq_sync_full(flog_rdp, (void *)flog.t[1]);
+#endif
         rdpq_detach_show();
     }
 
@@ -418,10 +524,18 @@ static void autotest(const char *list)
         replay_start(&r, &game, &level);
         autotest_replay = i;
         for (size_t f = 0; f < r.count; f++) {
+            /* As the main loop: a buffer first, then the frame's work. */
+            surface_t *disp = display_get();
+            uint32_t start = TICKS_READ();
             tick(r.frames[f].in);
             sound_update(game.sfx, audio_music(&game));
             snprintf(status, sizeof status, "replay %d/%d %.40s", i + 1, count, names[i]);
-            render(status, true);
+            render(disp, status, true);
+            uint32_t busy = TICKS_TO_US(TICKS_READ() - start);
+            if (measuring && busy > g_busy_us_max) {     /* not the load frames */
+                g_busy_us_max = busy;
+                g_busy_at = (uint32_t)autotest_replay << 16 | (game.frame & 0xffff);
+            }
             if (f == 3)             /* queue primed after the load */
                 measuring = true;
         }
@@ -438,6 +552,10 @@ static void autotest(const char *list)
         g_replays_passed += ok;
         replay_free(&r);
     }
+    debugf("replay test %lu/%lu pass; worst frame %lu us, worst CPU+RDP %lu us at replay %lu frame %lu, "
+           "repeated frames %lu\n", (unsigned long)g_replays_passed, (unsigned long)g_replays_run,
+           (unsigned long)g_frame_us_max, (unsigned long)g_busy_us_max,
+           (unsigned long)(g_busy_at >> 16), (unsigned long)(g_busy_at & 0xffff), (unsigned long)g_repeats);
     g_autotest_done = 0x600DF00D;
 
     while (1) {
@@ -461,12 +579,15 @@ static void autotest(const char *list)
 
 /* Sound effects share SFX_VOICES mixer channels, round robin. Music is
  * tracker modules (rom:/<name>.xm64) in a blue/green pair of players: the
- * active one is heard; a switch to a song that is not loaded loads it into
- * the inactive player, a switch to a loaded one seeks it to the top, and
- * the volumes swap. The silenced player keeps running: stopping or closing a playing module
- * (xm64player_stop/close) hung the RSP queue in ares with libdragon
- * preview. So a player is loaded only while empty,
- * which with two songs is enough; reloading one needs that fixed. Each
+ * active one plays, the other is stopped (a muted player's channels are
+ * still fetched and mixed, about 0.8 ms a frame). A switch to a song that
+ * is not loaded loads it into the inactive player; a switch to a loaded one
+ * plays it again from the top. sound_open loads every song (stopped), since
+ * a load takes about a frame of CPU (the title song, 18 ms). A player is
+ * never closed: in libdragon preview, xm64player_close lowers its channels'
+ * frequency limit but the mixer keeps checking their last note's frequency,
+ * which fails an assertion (mixer.c, "exceeds configured limit"). So a
+ * player is loaded only while empty, which with two songs is enough. Each
  * player gets its mixer channels when first loaded. */
 #define SFX_VOICES 8
 #define MUSIC_VOL 0.45f
@@ -477,27 +598,15 @@ static struct {
 } music[2];
 static uint8_t cur_music, active, next_voice, next_ch = SFX_VOICES;
 
-int sound_open(const char *dir)
-{
-    char path[64];
-    (void)dir;
-    audio_init(22050, 4);
-    mixer_init(MIXER_MAX_CHANNELS);
-    for (int i = 0; i < SFX_COUNT; i++) {
-        snprintf(path, sizeof path, "rom:/%s.wav64", audio_sfx_names[i]);
-        wav64_open(&sfx_wav[i], path);
-    }
-    for (int i = 0; i < SFX_VOICES; i++)
-        mixer_ch_set_vol(i, 0.6f, 0.6f);
-    return 0;
-}
-
 /* Make song m (0 = silence) the heard one, from its beginning. */
 static void music_switch(uint8_t m)
 {
     int p = music[0].song == m ? 0 : music[1].song == m ? 1 : -1;
-    if (m && p >= 0) {
-        xm64player_seek(&music[p].xm, 0, 0, 0);     /* already loaded: back to the top */
+    if (m && p >= 0) {          /* already loaded: play it from the top */
+        xm64player_t *xm = &music[p].xm;
+        xm->stop_requested = false;     /* a stop not carried out yet (it waits for a tick) */
+        xm64player_play(xm, xm->first_ch);
+        xm64player_seek(xm, 0, 0, 0);
     } else if (m) {
         p = !active;
         if (music[p].song == 0 && music[!p].song == 0)
@@ -515,10 +624,32 @@ static void music_switch(uint8_t m)
         music[p].song = m;
     }
     for (int i = 0; i < 2; i++)
-        if (music[i].song)
+        if (music[i].song) {
             xm64player_set_vol(&music[i].xm, i == p ? MUSIC_VOL : 0);
+            if (i != p && music[i].xm.playing)
+                xm64player_stop(&music[i].xm);
+        }
     if (p >= 0)
         active = (uint8_t)p;
+}
+
+int sound_open(const char *dir)
+{
+    char path[64];
+    (void)dir;
+    audio_init(22050, 4);
+    mixer_init(MIXER_MAX_CHANNELS);
+    for (int i = 0; i < SFX_COUNT; i++) {
+        snprintf(path, sizeof path, "rom:/%s.wav64", audio_sfx_names[i]);
+        wav64_open(&sfx_wav[i], path);
+    }
+    for (int i = 0; i < SFX_VOICES; i++)
+        mixer_ch_set_vol(i, 0.6f, 0.6f);
+    _Static_assert(MUSIC_COUNT <= 2, "more songs than music players");
+    for (uint8_t m = 1; m <= MUSIC_COUNT; m++)
+        music_switch(m);
+    music_switch(0);            /* both stopped */
+    return 0;
 }
 
 void sound_update(uint32_t bits, uint8_t m)
@@ -543,6 +674,43 @@ void sound_update(uint32_t bits, uint8_t m)
 
 void sound_close(void) {}
 
+#ifdef FRAME_LOG
+/* At mark 1 (a buffer is free): log the previous frame, whose marks are
+ * still in flog.t except 0 and 1. Interval: mark 1 to mark 1; 16.7 ms
+ * when on time, 33.4 ms when a frame was shown twice. */
+static void flog_frame(void)
+{
+    static const char *const state[] = {"play", "countdown", "paused", "title"};
+    int st = game.title ? 3 : game.paused ? 2 : game.countdown ? 1 : 0;
+    uint32_t us[5] = {
+        TICKS_TO_US(flog.t[1] - flog.prev), TICKS_TO_US(flog.t[1] - flog.t[0]),
+        TICKS_TO_US(flog.t[4] - flog.prev), flog_rdp_us, TICKS_TO_US(flog.t[3] - flog.t[2]),
+    };
+    if (flog.n++ > 2) {
+        for (int i = 0; i < 5; i++)
+            if (us[i] > flog.worst[i])
+                flog.worst[i] = i == 3 ? flog_rdp_worst : us[i];
+        if (us[0] > 17500) {
+            flog.slow++;
+            debugf("slow f%lu %s cd %d: interval %lu us, wait %lu, cpu %lu (tick %lu sound %lu), rdp %lu\n",
+                   (unsigned long)game.frame, state[st], game.countdown, (unsigned long)us[0],
+                   (unsigned long)us[1], (unsigned long)us[2],
+                   (unsigned long)TICKS_TO_US(flog.t[2] - flog.prev), (unsigned long)us[4],
+                   (unsigned long)us[3]);
+        }
+    }
+    if (flog.n % 120 == 0) {
+        debugf("2 s %s: %lu slow; worst interval %lu us, wait %lu, cpu %lu, rdp %lu, sound %lu\n",
+               state[st], (unsigned long)flog.slow, (unsigned long)flog.worst[0],
+               (unsigned long)flog.worst[1], (unsigned long)flog.worst[2],
+               (unsigned long)flog.worst[3], (unsigned long)flog.worst[4]);
+        memset(flog.worst, 0, sizeof flog.worst);
+        flog.slow = flog_rdp_worst = 0;
+    }
+    flog.prev = flog.t[1];
+}
+#endif
+
 int main(void)
 {
     debug_init_emulog();
@@ -555,11 +723,14 @@ int main(void)
     debugf("core_selftest=%08lx %s\n", (unsigned long)selftest_hash,
            selftest_pass ? "PASS" : "FAIL");
 
+    assertf(get_memory_size() >= 8 << 20, "Capture The Flag needs the Expansion Pak (8 MB)");
     dfs_init(DFS_DEFAULT_LOCATION);
     joypad_init();
     /* 640x240 progressive; the VI resample filter can artifact above 400
-     * wide, so filters are off. */
-    display_init(RESOLUTION_640x240, DEPTH_16_BPP, 3, GAMMA_NONE, FILTERS_DISABLED);
+     * wide, so filters are off. Double buffered: frames are shown in FIFO
+     * order, so with 3 buffers a loop faster than 60 Hz keeps 2 frames
+     * queued and every frame reaches the screen a frame later. */
+    display_init(RESOLUTION_640x240, DEPTH_16_BPP, 2, GAMMA_NONE, FILTERS_DISABLED);
     rdpq_init();
     vi_install_vblank_handler(count_repeats, NULL);
     rdpq_text_register_font(1, rdpq_font_load_builtin(FONT_BUILTIN_DEBUG_MONO));
@@ -572,6 +743,7 @@ int main(void)
         snprintf(path, sizeof path, "rom:/%s.sprite", name);
         sprites[i] = sprite_load(path);
     }
+    build_controls_layer();
     level_count = read_list("rom:/levels.txt", level_names, MAX_LEVELS);
     assertf(level_count > 0, "no levels in rom:/levels.txt");
     last_ticks = TICKS_READ();
@@ -589,6 +761,14 @@ int main(void)
     set_stages();
     game_title(&game);
     while (1) {
+        /* Wait for a free buffer (the vblank) before reading the pads, so
+         * the frame uses the newest input. */
+        FLOG_MARK(0);
+        surface_t *disp = display_get();
+        FLOG_MARK(1);
+#ifdef FRAME_LOG
+        flog_frame();
+#endif
         joypad_poll();
         joypad_buttons_t pressed = joypad_get_buttons_pressed(JOYPAD_PORT_1);
         if (pressed.l) {            /* debug: next level */
@@ -610,7 +790,10 @@ int main(void)
             load_level(game.stage);
             game_set_level(&game, &level);
         }
+        FLOG_MARK(2);
         sound_update(game.sfx, audio_music(&game));
-        render(NULL, false);
+        FLOG_MARK(3);
+        render(disp, NULL, false);
+        FLOG_MARK(4);
     }
 }
