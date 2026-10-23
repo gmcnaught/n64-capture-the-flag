@@ -70,11 +70,15 @@ FORCE:
 $(FS_DIR)/%.sprite: $(ASSETS_DIR)/n64/%.png
 	@mkdir -p $(dir $@)
 	@echo "    [SPRITE] $@"
-	$(N64_MKSPRITE) --format RGBA16 $(MKSPRITE_FLAGS) -o $(FS_DIR) "$<"
+	$(N64_MKSPRITE) --format $(MKSPRITE_FORMAT) $(MKSPRITE_FLAGS) -o $(FS_DIR) "$<"
 
-# Textures default to RGBA16; large sheets are compressed at level 1.
+# Textures default to RGBA16; large sheets are compressed at level 1. The
+# sky sheets are CI8: tools/build_sprites.py writes them paletted, in the
+# colors RGBA16 would keep, so they look the same at half the memory.
+MKSPRITE_FORMAT = RGBA16
 $(FS_DIR)/font.sprite \
   $(patsubst %,$(FS_DIR)/sky_%.sprite,$(BACKDROPS)) $(patsubst %,$(FS_DIR)/scenery_%.sprite,$(BACKDROPS)): MKSPRITE_FLAGS = --compress 1
+$(patsubst %,$(FS_DIR)/sky_%.sprite,$(BACKDROPS)): MKSPRITE_FORMAT = CI8
 
 $(FS_DIR)/%.wav64: $(ASSETS_DIR)/audio/%.wav
 	@mkdir -p $(dir $@)

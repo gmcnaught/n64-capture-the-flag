@@ -3,7 +3,8 @@
 
 usage: build_sprites.py <assets_dir>
 
-Writes <assets_dir>/n64/<name>.png (mksprite input) and
+Writes <assets_dir>/n64/<name>.png (mksprite input; the sky sheets paletted,
+for CI8) and
 <assets_dir>/host/<name>.rgba (raw RGBA: "RGBA", u16 w, u16 h big-endian,
 then w*h*4 bytes) for each sheet in platform/common/scene.c's
 scene_sheet_name: the tiles once per tileset, the sky and scenery ones
@@ -240,6 +241,19 @@ def clouds():
     return out
 
 
+def paletted(im):
+    """Opaque im as a paletted image of its colors cut to 5 bits a channel
+    (what RGBA16 keeps), for a CI8 sheet: mksprite keeps a PNG's palette."""
+    rgb = im.convert("RGB").point(lambda c: c & 0xF8)
+    colors = sorted({c for _, c in rgb.getcolors(1 << 24)})
+    if len(colors) > 256:
+        raise SystemExit(f"{len(colors)} colors: more than CI8 holds")
+    index = {c: i for i, c in enumerate(colors)}
+    out = Image.frombytes("P", im.size, bytes(index[c] for c in rgb.getdata()))
+    out.putpalette([v for c in colors for v in c])
+    return out
+
+
 def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
@@ -252,7 +266,7 @@ def main():
                      for n, im in sheets()] + native:
         if im.width > 1024:
             raise SystemExit(f"{name}: {im.width} px wide, RDP textures are at most 1024")
-        im.save(os.path.join(out, "n64", name + ".png"))
+        (paletted(im) if name.startswith("sky_") else im).save(os.path.join(out, "n64", name + ".png"))
         with open(os.path.join(out, "host", name + ".rgba"), "wb") as f:
             f.write(b"RGBA" + struct.pack(">HH", im.width, im.height) + im.tobytes())
         print(f"{name}: {im.width}x{im.height}")

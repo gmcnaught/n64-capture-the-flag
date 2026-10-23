@@ -81,8 +81,13 @@ void scene_draw_sky_rows(const Game *g, const DrawApi *d, int step, int y0, int 
         y1 = h;
     if (y0 >= y1)
         return;
-    for (int x = -s; x < VIEW_W; x += SKY_W)
-        d->blit(d->ctx, SPR_SKY, 0, y0, SKY_W, y1 - y0, x, y0, 0);
+    /* Only the columns on screen: the N64 loads every texel of a blit,
+     * off-screen ones included. */
+    for (int x = 0; x < VIEW_W; s = 0) {
+        int w = SKY_W - s < VIEW_W - x ? SKY_W - s : VIEW_W - x;
+        d->blit(d->ctx, SPR_SKY, s, y0, w, y1 - y0, x, y0, 0);
+        x += w;
+    }
 }
 
 void scene_draw_sky(const Game *g, const DrawApi *d)

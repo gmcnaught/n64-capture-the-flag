@@ -25,7 +25,8 @@
  * Debug (controller 1): L next level, C-down restart (skips the title),
  * C-up debug overlay.
  *
- * Textures are RGBA16 (RGBA5551).
+ * Textures are RGBA16 (RGBA5551), the sky sheets CI8 (a palette of RGBA16
+ * colors: half the memory, the same pixels).
  *
  * Replay test: built with -DAUTOTEST (make -C platform/n64 test), plays the
  * replays in rom:/check.txt (the ones `make check` picked); with Start held
@@ -37,6 +38,7 @@
  * that missed 60 Hz over USB (debugf; UNFLoader shows it), with the times
  * of its parts, and every 2 s the worst of each.
  */
+#include <malloc.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -280,6 +282,43 @@ static int background_level = -1;   /* level_index drawn into background */
 static int sprites_backdrop = -1;   /* backdrop of sprites[SPR_SKY], sprites[SPR_SCENERY] */
 static int sprites_tileset = -1;    /* tileset of sprites[SPR_TILES] */
 
+/* The sky and scenery sheets load into one buffer each, allocated on the
+ * first load at the size of the largest backdrop's, so a backdrop change
+ * does not free and allocate them again. */
+static void *backdrop_buf[SPR_COUNT];
+static int backdrop_buf_size[SPR_COUNT];
+
+static void load_backdrop_sheet(int spr, const char *path)
+{
+    if (!backdrop_buf[spr]) {
+        for (int b = 0; b < BACKDROP_COUNT; b++) {
+            char name[48], p[64];
+            scene_sheet_name(spr, b, 0, name, sizeof name);
+            snprintf(p, sizeof p, "rom:/%s.sprite", name);
+            FILE *f = fopen(p, "rb");
+            assertf(f, "missing %s", p);
+            fseek(f, 0, SEEK_END);
+            int sz = (int)ftell(f), need = 0;
+            rewind(f);
+            asset_loadf_into(f, &sz, NULL, &need);  /* NULL: only sets need */
+            fclose(f);
+            if (need > backdrop_buf_size[spr])
+                backdrop_buf_size[spr] = need;
+        }
+        backdrop_buf[spr] = memalign(32, backdrop_buf_size[spr]);
+        assertf(backdrop_buf[spr], "out of memory for the backdrop sheets");
+    }
+    FILE *f = fopen(path, "rb");
+    assertf(f, "missing %s", path);
+    fseek(f, 0, SEEK_END);
+    int sz = (int)ftell(f), size = backdrop_buf_size[spr];
+    rewind(f);
+    bool ok = asset_loadf_into(f, &sz, backdrop_buf[spr], &size);
+    fclose(f);
+    assertf(ok, "%s needs %d bytes", path, size);
+    sprites[spr] = sprite_load_buf(backdrop_buf[spr], sz);
+}
+
 static void load_sheet(int spr)
 {
     char name[48], path[64];
@@ -287,7 +326,10 @@ static void load_sheet(int spr)
     snprintf(path, sizeof path, "rom:/%s.sprite", name);
     if (sprites[spr])
         sprite_free(sprites[spr]);
-    sprites[spr] = sprite_load(path);
+    if (spr == SPR_SKY || spr == SPR_SCENERY)
+        load_backdrop_sheet(spr, path);
+    else
+        sprites[spr] = sprite_load(path);
 }
 
 /* Swap in the sheets of the game's backdrop and tileset if they changed
@@ -298,11 +340,12 @@ static int sky_band;
 
 static void find_sky_band(void)
 {
-    surface_t px = sprite_get_pixels(sprites[SPR_SKY]);
+    surface_t px = sprite_get_pixels(sprites[SPR_SKY]);      /* CI8: one color per index */
+    int bpp = TEX_FORMAT_BITDEPTH(surface_get_format(&px)) / 8;
     for (sky_band = 0; sky_band < px.height; sky_band++) {
-        const uint16_t *row = (const uint16_t *)((const uint8_t *)px.buffer + sky_band * px.stride);
+        const uint8_t *row = (const uint8_t *)px.buffer + sky_band * px.stride;
         int x = 1;
-        while (x < px.width && row[x] == row[0])
+        while (x < px.width && !memcmp(row + x * bpp, row, (size_t)bpp))
             x++;
         if (x < px.width)
             break;
@@ -389,6 +432,7 @@ static void sky_part(int i, int step, int part)
         rmode = RMODE_NONE;
         scene_draw_sky_rows(&game, &draw_api, step, y0, y1);
         use_mode(RMODE_COPY);
+        rdpq_mode_tlut(TLUT_NONE);      /* the CI8 sky blits turned it on */
         rdpq_tex_blit(&background, 0, y0, &(rdpq_blitparms_t){.t0 = y0, .width = VIEW_W, .height = y1 - y0});
     }
     rdpq_detach();
