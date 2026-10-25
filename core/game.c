@@ -1,16 +1,16 @@
 #include "game.h"
 
-static int overlap(int ax, int ay, int aw, int ah, int bx, int by, int bw, int bh)
+static bool overlap(int ax, int ay, int aw, int ah, int bx, int by, int bw, int bh)
 {
     return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
 }
 
-static int body_overlap(const Body *a, const Body *b)
+static bool body_overlap(const Body *a, const Body *b)
 {
     return overlap(a->x, a->y, a->w, a->h, b->x, b->y, b->w, b->h);
 }
 
-static int body_overlap_box(const Body *a, const Solid *s)
+static bool body_overlap_box(const Body *a, const Solid *s)
 {
     return overlap(a->x, a->y, a->w, a->h, s->x, s->y, s->w, s->h);
 }
@@ -59,7 +59,7 @@ static void read_entities(Game *g)
             if (g->flag_count == MAX_GAME_FLAGS)
                 break;
             Flag *f = &g->flags[g->flag_count++];
-            *f = (Flag){0};
+            *f = (Flag){};
             f->team = (uint8_t)t;
             f->home_x = (int16_t)(e.x + (e.w - FLAG_W) / 2);   /* standing on the cell's bottom */
             f->home_y = (int16_t)(e.y + e.h - FLAG_H);
@@ -94,8 +94,7 @@ static void read_entities(Game *g)
                 int i = g->platform_count++;
                 g->platforms[i] = (Platform){e.x, e.y, e.x2, e.y2, (int32_t)e.param << 8,
                                              (uint16_t)(e.flag >> 1), 0, 1, 0};
-                g->lv.solids[i] = (Solid){e.x, e.y, (int16_t)e.w, (int16_t)e.h, 1,
-                                          (uint8_t)(e.flag & 1)};
+                g->lv.solids[i] = (Solid){e.x, e.y, (int16_t)e.w, (int16_t)e.h, true, (e.flag & 1) != 0};
                 g->lv.solid_count = g->platform_count;
             }
             break;
@@ -104,8 +103,7 @@ static void read_entities(Game *g)
                 WindZone *z = &g->winds[g->wind_count++];
                 *z = (WindZone){e.x, e.y, (int16_t)e.w, (int16_t)e.h, (int32_t)e.param << 8,
                                 e.flag, (uint16_t)e.x2, (uint16_t)(((uint16_t)e.y2 >> 2) & 0x1fff),
-                                (uint8_t)(e.y2 & 1), (uint8_t)((e.y2 >> 1) & 1),
-                                (uint8_t)((uint16_t)e.y2 >> 15), 0, 0};
+                                (e.y2 & 1) != 0, (e.y2 & 2) != 0, ((uint16_t)e.y2 >> 15) != 0, 0, 0};
             }
             break;
         }
@@ -215,13 +213,13 @@ static void new_round(Game *g)
     reset_platforms(g);
     for (int i = 0; i < g->wind_count; i++)
         g->winds[i].force = 0;
-    g->fruit_active = 0;
+    g->fruit_active = false;
     g->fruit_timer = fruit_interval(g);
     g->water_len = 0;
     for (int i = 0; i < g->flag_count; i++)
         flag_home(&g->flags[i]);
     for (int t = 0; t < MAX_PLAYERS; t++) {
-        g->caught[t] = 0;
+        g->caught[t] = false;
         g->carrying[t] = -1;
     }
     for (int t = 0; t < g->player_count; t++) {
@@ -252,7 +250,7 @@ uint16_t game_wind_calm(const Game *g)
 }
 
 /* Sum of the forces of the zones a body is in, geysers (up) or the others. */
-static int32_t zones_at(const Game *g, const Body *b, int up)
+static int32_t zones_at(const Game *g, const Body *b, bool up)
 {
     int32_t f = 0;
     for (int i = 0; i < g->wind_count; i++) {
@@ -266,13 +264,13 @@ static int32_t zones_at(const Game *g, const Body *b, int up)
 
 int32_t game_wind_at(const Game *g, const Body *b)
 {
-    return zones_at(g, b, 0);
+    return zones_at(g, b, false);
 }
 
 /* A geyser lifts a body: its rising speed grows by the force, up to WIND_LIFT_MAX. */
 static void geyser_lift(const Game *g, Body *b)
 {
-    int32_t f = zones_at(g, b, 1);
+    int32_t f = zones_at(g, b, true);
     if (f && b->vy - f > -WIND_LIFT_MAX)
         b->vy -= f;
     else if (f)
@@ -309,7 +307,8 @@ static void new_match(Game *g)
         g->wins[t] = 0;
     for (int t = 0; t < MAX_PLAYERS; t++)
         g->kos[t] = 0;
-    g->title = g->paused = 0;
+    g->title = TITLE_NONE;
+    g->paused = PAUSE_NONE;
     g->menu_sel = MENU_RESUME;
     new_round(g);
 }
@@ -363,7 +362,7 @@ void game_set_level(Game *g, const Level *lv)
 
 /* ---- flags ------------------------------------------------------------------ */
 
-static int alive(const Player *p)
+static bool alive(const Player *p)
 {
     return !p->dead && p->state != PS_HURT;
 }
@@ -387,7 +386,7 @@ static int layout_goal(Game *g, int t)
 static void send_home(Game *g, int t)
 {
     Player *p = &g->players[t];
-    g->caught[t] = 0;
+    g->caught[t] = false;
     player_place(p, g->spawn_x[t], g->spawn_y[t], 0);
     /* Starts are by the middle pillar: face away from the middle, into the arena. */
     p->facing = (int8_t)(g->spawn_x[t] + PLAYER_HIT_W / 2 < g->lv.px_w / 2 ? -1 : 1);
@@ -411,13 +410,13 @@ static void drop_and_send_home(Game *g, int t)
 }
 
 /* Can a player of team t take flag f? */
-static int can_take(const Flag *f, int t)
+static bool can_take(const Flag *f, int t)
 {
     switch (f->state) {
     case FS_HOME:    return f->team != t;   /* only the other team takes it from home */
-    case FS_DROPPED: return 1;
+    case FS_DROPPED: return true;
     case FS_PLACED:  return f->holder != t; /* the scoring team has no use for it */
-    default:         return 0;
+    default:         return false;
     }
 }
 
@@ -500,14 +499,14 @@ static void update_flags(Game *g)
 /* ---- player vs player bodies ----------------------------------------------- */
 
 /* Does a stand on top of b (feet on b's head, overlapping horizontally)? */
-static int stands_on(const Body *a, const Body *b)
+static bool stands_on(const Body *a, const Body *b)
 {
     return a->y + a->h == b->y && a->x < b->x + b->w && a->x + a->w > b->x;
 }
 
 /* Collision between players a and b applies while both are alive and
  * their bodies do not already overlap. */
-static int collide(const Game *g, int a, int b)
+static bool collide(const Game *g, int a, int b)
 {
     const Player *pa = &g->players[a], *pb = &g->players[b];
     return alive(pa) && alive(pb) && !g->caught[a] && !g->caught[b] &&
@@ -574,7 +573,7 @@ static void squish(Game *g, int t)
         send_home(g, t);
 }
 
-static int on_top(const Body *b, const Solid *s)
+static bool on_top(const Body *b, const Solid *s)
 {
     return b->y + b->h == s->y && b->x < s->x + s->w && b->x + b->w > s->x;
 }
@@ -587,7 +586,7 @@ static void solid_move(Game *g, int i, int dx, int dy)
     Solid *s = &g->lv.solids[i];
     Body *bodies[MAX_PLAYERS + MAX_GAME_FLAGS];
     int8_t who[MAX_PLAYERS + MAX_GAME_FLAGS];    /* player index, or MAX_PLAYERS + flag */
-    uint8_t riding[MAX_PLAYERS + MAX_GAME_FLAGS];
+    bool riding[MAX_PLAYERS + MAX_GAME_FLAGS];
     int n = 0;
     for (int t = 0; t < g->player_count; t++) {
         Player *p = &g->players[t];
@@ -599,13 +598,14 @@ static void solid_move(Game *g, int i, int dx, int dy)
         n++;
     }
     /* A player standing on a rider rides too (up a stack). */
-    for (int pass = 1, more = 1; more && pass < n; pass++) {
-        more = 0;
+    bool more = true;
+    for (int pass = 1; more && pass < n; pass++) {
+        more = false;
         for (int k = 0; k < n; k++)
             for (int j = 0; j < n && !riding[k]; j++)
                 if (riding[j] && j != k && collide(g, who[k], who[j]) &&
                     stands_on(bodies[k], bodies[j]))
-                    riding[k] = more = 1;
+                    riding[k] = more = true;
     }
     for (int f = 0; f < g->flag_count; f++)
         if (g->flags[f].state == FS_DROPPED) {
@@ -616,7 +616,7 @@ static void solid_move(Game *g, int i, int dx, int dy)
         }
     if (dx) {
         s->x = (int16_t)(s->x + dx);
-        s->active = 0;
+        s->active = false;
         for (int k = 0; k < n; k++) {
             Body *b = bodies[k];
             if (!s->oneway && who[k] < MAX_PLAYERS && body_overlap_box(b, s)) {
@@ -627,12 +627,12 @@ static void solid_move(Game *g, int i, int dx, int dy)
                 body_move_x(b, FX(dx), &g->lv);
             }
         }
-        s->active = 1;
+        s->active = true;
     }
     if (dy) {
         int top = s->y;
         s->y = (int16_t)(s->y + dy);
-        s->active = 0;
+        s->active = false;
         for (int k = 0; k < n; k++) {
             Body *b = bodies[k];
             if (!s->oneway && who[k] < MAX_PLAYERS && body_overlap_box(b, s)) {
@@ -647,7 +647,7 @@ static void solid_move(Game *g, int i, int dx, int dy)
                 body_move_y(b, FX(s->y - (b->y + b->h)), &g->lv, 0);   /* rising under its feet */
             }
         }
-        s->active = 1;
+        s->active = true;
     }
 }
 
@@ -662,21 +662,21 @@ static void update_platforms(Game *g)
 
 /* ---- water fruit (Bubble Bobble water) ------------------------------------ */
 
-static int water_floor(const Level *lv, int cx, int cy)
+static bool water_floor(const Level *lv, int cx, int cy)
 {
     uint8_t c = level_cell(lv, cx, cy);
     return c == CELL_SOLID || c == CELL_ONEWAY;
 }
 
 /* Bottom ground: solid from below the cell down to the arena's bottom. */
-static int water_on_ground(const Level *lv, int cx, int cy)
+static bool water_on_ground(const Level *lv, int cx, int cy)
 {
     if (cy + 1 >= lv->cell_h)
-        return 0;
+        return false;
     for (int y = cy + 1; y < lv->cell_h; y++)
         if (level_cell(lv, cx, y) != CELL_SOLID)
-            return 0;
-    return 1;
+            return false;
+    return true;
 }
 
 /* Row of the first floor below (cx, cy), or the arena height if none. */
@@ -707,41 +707,41 @@ static int water_overhang(const Game *g, int cx, int cy)
     return extend;
 }
 
-/* Next cell of the front, or 0 if the stream drains here. */
-static int water_next(Game *g, int *nx, int *ny)
+/* Next cell of the front, or false if the stream drains here. */
+static bool water_next(Game *g, int *nx, int *ny)
 {
     const Level *lv = &g->lv;
     int cx = g->water_cx[0], cy = g->water_cy[0];
     if (g->water_steps >= WATER_MAX_STEPS || cy >= lv->cell_h - 1)
-        return 0;
+        return false;
     if (!water_floor(lv, cx, cy + 1)) {
         if (!g->water_air) {        /* just left a floor */
-            g->water_air = 1;
+            g->water_air = true;
             g->water_extend = (uint8_t)water_overhang(g, cx, cy);
         }
         if (g->water_extend && level_cell(lv, cx + g->water_dir, cy) != CELL_SOLID) {
             g->water_extend--;
             *nx = cx + g->water_dir;
             *ny = cy;
-            return 1;
+            return true;
         }
         g->water_extend = 0;
         *nx = cx;
         *ny = cy + 1;
-        return 1;
+        return true;
     }
-    g->water_air = 0;
+    g->water_air = false;
     for (int turn = 0; turn < 2; turn++) {
         if (level_cell(lv, cx + g->water_dir, cy) != CELL_SOLID) {
             *nx = cx + g->water_dir;
             *ny = cy;
-            return 1;
+            return true;
         }
         if (water_on_ground(lv, cx, cy))
-            return 0;                   /* reached a wall on the bottom ground */
+            return false;                   /* reached a wall on the bottom ground */
         g->water_dir = (int8_t)-g->water_dir;
     }
-    return 0;                           /* boxed in */
+    return false;                           /* boxed in */
 }
 
 /* A caught player stands at the front of the stream. */
@@ -765,7 +765,7 @@ static void water_release(Game *g, int t)
             b->x = (int16_t)(b->x + nudge[i]);
             break;
         }
-    g->caught[t] = 0;
+    g->caught[t] = false;
     p->invuln = 30;
 }
 
@@ -775,10 +775,10 @@ static void update_water(Game *g)
     if (g->water_len == 0 && g->fruit_spot_count) {
         if (g->fruit_timer && --g->fruit_timer == 0) {
             if (g->fruit_active) {
-                g->fruit_active = 0;
+                g->fruit_active = false;
                 g->fruit_timer = fruit_interval(g);
             } else {
-                g->fruit_active = 1;
+                g->fruit_active = true;
                 g->fruit_spot = (uint8_t)(rnd(g) % g->fruit_spot_count);
                 g->fruit_timer = FRUIT_LIFE;
             }
@@ -791,14 +791,14 @@ static void update_water(Game *g)
             if (!alive(p) || g->caught[t] ||
                 !overlap(p->body.x, p->body.y, p->body.w, p->body.h, fx, fy, TILE_W, TILE_H))
                 continue;
-            g->fruit_active = 0;
+            g->fruit_active = false;
             g->fruit_timer = fruit_interval(g);
             g->water_len = 1;
             g->water_cx[0] = (int16_t)(fx >> TILE_SHIFT_X);
             g->water_cy[0] = (int16_t)(fy >> TILE_SHIFT_Y);
             g->water_dir = p->facing;
-            g->water_draining = 0;
-            g->water_air = 0;
+            g->water_draining = false;
+            g->water_air = false;
             g->water_extend = 0;
             g->water_steps = 0;
             g->water_step_timer = WATER_STEP;
@@ -819,7 +819,7 @@ static void update_water(Game *g)
         g->water_step_timer = WATER_STEP;
         int nx = 0, ny = 0;
         if (!g->water_draining && !water_next(g, &nx, &ny)) {
-            g->water_draining = 1;
+            g->water_draining = true;
             for (int t = 0; t < g->player_count; t++)
                 if (g->caught[t])
                     water_release(g, t);
@@ -850,7 +850,7 @@ static void update_water(Game *g)
         for (int i = 0; i < g->water_len; i++)
             if (overlap(p->body.x, p->body.y, p->body.w, p->body.h,
                         g->water_cx[i] * TILE_W, g->water_cy[i] * TILE_H, TILE_W, TILE_H)) {
-                g->caught[t] = 1;
+                g->caught[t] = true;
                 p->state = PS_NORMAL;
                 p->attack_timer = p->dash_timer = p->knock = 0;
                 water_hold(g, t);
@@ -862,7 +862,7 @@ static void update_water(Game *g)
 
 /* ---- combat ----------------------------------------------------------------- */
 
-int game_attack_box(const Game *g, const Player *p, int *x, int *y, int *w, int *h)
+bool game_attack_box(const Game *g, const Player *p, int *x, int *y, int *w, int *h)
 {
     return player_attack_box(p, &g->tuning, x, y, w, h);
 }
@@ -927,7 +927,7 @@ static void pause_menu(Game *g, uint16_t pressed)
         return;
     g->sfx |= SFX_BIT(SFX_MENU);
     switch (g->menu_sel) {
-    case MENU_RESUME:   g->paused = 0; break;
+    case MENU_RESUME:   g->paused = PAUSE_NONE; break;
     case MENU_CONTROLS: g->paused = PAUSE_CONTROLS; break;
     case MENU_RESTART:  new_match(g); break;
     case MENU_QUIT:     game_title(g); break;
@@ -1015,7 +1015,7 @@ void game_tick(Game *g, const InputState in[MAX_PLAYERS])
         return;
     }
     if (any & BTN_START) {
-        g->paused = g->paused ? 0 : PAUSE_MENU;
+        g->paused = g->paused ? PAUSE_NONE : PAUSE_MENU;
         g->menu_sel = MENU_RESUME;
         g->sfx |= SFX_BIT(SFX_MENU);
         return;
@@ -1088,7 +1088,7 @@ void game_tick(Game *g, const InputState in[MAX_PLAYERS])
         if (riders_of(g, t) & ~stacked_before[t] && p->body.vy < 0) {
             p->body.vy = 0;
             p->body.rem_y = 0;
-            p->jumping = 0;
+            p->jumping = false;
         }
     }
     for (int t = 0; t < n; t++)

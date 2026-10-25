@@ -116,17 +116,17 @@ int replay_load(Replay *r, const char *path)
                 fclose(f);
                 return 1;
             }
-            *tuning_field(&r->tuning, i) = (int32_t)strtol(b, NULL, 0);
+            *tuning_field(&r->tuning, i) = (int32_t)strtol(b, nullptr, 0);
             continue;
         }
         if (sscanf(line, "hash %63s", a) == 1) {
-            r->has_hash = 1;
-            r->hash = (uint32_t)strtoul(a, NULL, 16);
+            r->has_hash = true;
+            r->hash = (uint32_t)strtoul(a, nullptr, 16);
             continue;
         }
         int nk = sscanf(line, "kos %ld %ld %ld %ld", &k[0], &k[1], &k[2], &k[3]);
         if (nk >= 2) {
-            r->has_kos = 1;
+            r->has_kos = true;
             for (int i = 0; i < MAX_PLAYERS; i++)
                 r->kos[i] = i < nk ? (int)k[i] : 0;
             continue;
@@ -140,7 +140,7 @@ int replay_load(Replay *r, const char *path)
                 if (slash)
                     *slash = 0;
                 bad = parse_input(group, &in[i]);
-                group = slash ? slash + 1 : NULL;
+                group = slash ? slash + 1 : nullptr;
             }
             if (bad) {
                 fprintf(stderr, "%s:%d: unknown button '%c'\n", path, lineno, bad);
@@ -175,7 +175,7 @@ static void write_input(FILE *f, const InputState *in)
         fprintf(f, "%s", buttons);
 }
 
-static int input_used(const InputState *in)
+static bool input_used(const InputState *in)
 {
     return in->buttons || in->stick_x || in->stick_y;
 }

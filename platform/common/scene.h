@@ -48,7 +48,7 @@ typedef struct {
     void (*fill)(void *ctx, int x, int y, int w, int h, uint32_t rgba);
     void *ctx;
     /* Optional: draws the CONTROLS screen's layer (scene_draw_controls)
-     * some other way, e.g. from a buffer it was drawn into once. NULL:
+     * some other way, e.g. from a buffer it was drawn into once. nullptr:
      * scene_draw draws it. */
     void (*controls)(void *ctx);
 } DrawApi;
@@ -66,7 +66,7 @@ void scene_draw_sky_rows(const Game *g, const DrawApi *d, int step, int y0, int 
 void scene_draw_background(const Game *g, const DrawApi *d);
 /* Everything else (moving platforms first), over the background. debug:
  * collision overlay and hitboxes. */
-void scene_draw(const Game *g, const DrawApi *d, int debug);
+void scene_draw(const Game *g, const DrawApi *d, bool debug);
 /* The CONTROLS screen's picture, lines and text, without the dimmed game
  * under it: always the same pixels, and only opaque ones. */
 void scene_draw_controls(const Game *g, const DrawApi *d);

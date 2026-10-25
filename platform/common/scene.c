@@ -159,7 +159,7 @@ static void draw_platforms(const Game *g, const DrawApi *d)
 /* Conveyor belts over their cells' tiles: the chevrons scroll at
  * tuning.belt_speed (by Game.anim, so they stop while paused); a roller
  * ends each run of belt cells (belts running opposite ways meet without one). */
-static int is_belt(uint8_t s) { return s == SURFACE_BELT_L || s == SURFACE_BELT_R; }
+static bool is_belt(uint8_t s) { return s == SURFACE_BELT_L || s == SURFACE_BELT_R; }
 
 static void draw_belts(const Game *g, const DrawApi *d)
 {
@@ -477,7 +477,7 @@ static int font_advance(int i, int size)
 
 static int font_index(char c)
 {
-    const char *p = c ? strchr(FONT_CHARS, c) : NULL;
+    const char *p = c ? strchr(FONT_CHARS, c) : nullptr;
     return p ? (int)(p - FONT_CHARS) : 0;  /* unknown: space */
 }
 
@@ -627,7 +627,7 @@ static void draw_pause(const Game *g, const DrawApi *d)
     int x = (VIEW_W - w) / 2, cursor_w = font_width("> ", FONT_MEDIUM);
     for (int i = 0; i < MENU_COUNT; i++) {
         int y = 100 + i * (font_h(FONT_MEDIUM) + 8);
-        int sel = i == g->menu_sel;
+        bool sel = i == g->menu_sel;
         if (sel)
             font_text(g, d, x - cursor_w + ((g->frame >> 3) & 1) * 4, y, ">", FONT_MEDIUM,
                       TINT_GOLD, 0);
@@ -799,7 +799,7 @@ void scene_draw_background(const Game *g, const DrawApi *d)
     draw_goals(g, d);
 }
 
-void scene_draw(const Game *g, const DrawApi *d, int debug)
+void scene_draw(const Game *g, const DrawApi *d, bool debug)
 {
     draw_belts(g, d);
     draw_platforms(g, d);

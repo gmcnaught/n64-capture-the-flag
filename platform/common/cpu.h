@@ -16,12 +16,12 @@
 #include "game.h"
 
 /* A level was loaded (lv must stay loaded until the next call): read its
- * graph from nav (NULL or size 0: none) or start building it. Returns 1 if
- * the file's graph was used. */
-int cpu_set_level(const Level *lv, const PlayerTuning *t, const uint8_t *nav, uint32_t size);
-/* Build up to n more nodes of a graph cpu_set_level started; 1 when ready. */
-int cpu_build(int n);
-int cpu_ready(void);
+ * graph from nav (nullptr or size 0: none) or start building it. Returns
+ * true if the file's graph was used. */
+bool cpu_set_level(const Level *lv, const PlayerTuning *t, const uint8_t *nav, uint32_t size);
+/* Build up to n more nodes of a graph cpu_set_level started; true when ready. */
+bool cpu_build(int n);
+bool cpu_ready(void);
 
 /* Bots start over, seeded from seed (replays: a fixed seed). */
 void cpu_seed(uint32_t seed);

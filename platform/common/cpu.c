@@ -2,23 +2,23 @@
 
 static BotNav nav;
 static Bot bots[MAX_PLAYERS];
-static uint8_t have_level, on_title;
+static bool have_level, on_title;
 
-int cpu_set_level(const Level *lv, const PlayerTuning *t, const uint8_t *data, uint32_t size)
+bool cpu_set_level(const Level *lv, const PlayerTuning *t, const uint8_t *data, uint32_t size)
 {
-    have_level = 1;
+    have_level = true;
     if (data && size && bot_nav_read(&nav, lv, t, data, size) == 0)
-        return 1;
+        return true;
     bot_nav_begin(&nav, lv, t);
-    return 0;
+    return false;
 }
 
-int cpu_build(int n)
+bool cpu_build(int n)
 {
     return have_level && bot_nav_step(&nav, n);
 }
 
-int cpu_ready(void)
+bool cpu_ready(void)
 {
     return have_level && bot_nav_ready(&nav);
 }
@@ -32,11 +32,11 @@ void cpu_seed(uint32_t seed)
 void cpu_play(const Game *g, uint8_t mask, InputState in[MAX_PLAYERS])
 {
     if (g->title) {
-        on_title = 1;
+        on_title = true;
         return;
     }
     if (on_title) {
-        on_title = 0;
+        on_title = false;
         cpu_seed(g->frame);
     }
     for (int t = 0; t < g->player_count; t++)

@@ -13,7 +13,7 @@ OBJS := $(HOST_SRCS:%.c=$(BUILD_DIR)/platform/host/%.o) $(CORE_SRCS:$(ROOT)/%.c=
 SDL_CFLAGS := $(shell pkg-config --cflags sdl3)
 SDL_LIBS := $(shell pkg-config --libs sdl3)
 CFLAGS ?= -O2 -g
-CFLAGS += -std=c99 -Wall -Wextra -I$(ROOT)/core -I$(ROOT)/platform/common $(SDL_CFLAGS) -MMD -MP
+CFLAGS += -std=c23 -Wall -Wextra -I$(ROOT)/core -I$(ROOT)/platform/common $(SDL_CFLAGS) -MMD -MP
 CFLAGS += -DTUNING_HEADER_PATH='"$(abspath $(ROOT)/core/player_tuning.h)"'
 CFLAGS += -I$(BUILD_DIR)/libxm
 
@@ -47,12 +47,12 @@ all: $(BIN) $(ROUTEFIND) $(NAVBUILD)
 # CPU players' navigation graphs (the top Makefile's assets).
 navbuild: $(NAVBUILD)
 $(NAVBUILD): $(ROOT)/tools/navbuild.c $(CORE_SRCS:$(ROOT)/%.c=$(BUILD_DIR)/%.o)
-	$(CC) -O2 -std=c99 -Wall -Wextra -I$(ROOT)/core -o $@ $^
+	$(CC) -O2 -std=c23 -Wall -Wextra -I$(ROOT)/core -o $@ $^
 
 # Route finder for scripting replays (tools/make_replays.py).
 $(ROUTEFIND): $(ROOT)/tools/routefind.c $(CORE_SRCS:$(ROOT)/%.c=$(BUILD_DIR)/%.o) \
               $(BUILD_DIR)/platform/common/replay.o
-	$(CC) -O2 -std=c99 -Wall -Wextra -I$(ROOT)/core -I$(ROOT)/platform/common -o $@ $^
+	$(CC) -O2 -std=c23 -Wall -Wextra -I$(ROOT)/core -I$(ROOT)/platform/common -o $@ $^
 
 $(BIN): $(OBJS)
 	$(CC) -o $@ $^ $(SDL_LIBS)

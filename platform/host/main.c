@@ -58,14 +58,14 @@ static uint8_t *read_file(const char *path, uint32_t *size)
 {
     FILE *f = fopen(path, "rb");
     if (!f)
-        return NULL;
+        return nullptr;
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
     fseek(f, 0, SEEK_SET);
     uint8_t *data = malloc(n > 0 ? (size_t)n : 1);
     if (data && fread(data, 1, (size_t)n, f) != (size_t)n) {
         free(data);
-        data = NULL;
+        data = nullptr;
     }
     fclose(f);
     *size = (uint32_t)n;
@@ -98,7 +98,7 @@ static char level_name[64];
 
 /* The game keeps pointers into level_data: reload only before game_init
  * or game_set_level. */
-static int load_level(const char *name)
+[[nodiscard]] static int load_level(const char *name)
 {
     char path[512];
     uint32_t size;
@@ -195,7 +195,7 @@ static int riding(const Game *g, const Body *b)
     return -1;
 }
 
-static int run_headless(const char *path, int check, int update, long max_frames, int trace)
+static int run_headless(const char *path, bool check, bool update, long max_frames, bool trace)
 {
     Replay r;
     Game g;
@@ -234,25 +234,25 @@ static int run_headless(const char *path, int check, int update, long max_frames
     }
     uint32_t hash = game_hash(&g);
     printf("%s: frames=%lu hash=%08lx kos=", path, (unsigned long)n, (unsigned long)hash);
-    int ok = 1, kos_ok = 1;
+    bool ok = true, kos_ok = true;
     for (int t = 0; t < r.players; t++) {
         printf("%s%d", t ? "," : "", g.kos[t]);
         kos_ok &= r.kos[t] == g.kos[t];
     }
     if (r.has_hash && r.hash != hash) {
         printf(" (expected hash %08lx)", (unsigned long)r.hash);
-        ok = 0;
+        ok = false;
     }
     if (r.has_kos && !kos_ok) {
         printf(" (expected kos");
         for (int t = 0; t < r.players; t++)
             printf("%s%d", t ? "," : " ", r.kos[t]);
         printf(")");
-        ok = 0;
+        ok = false;
     }
     printf(" %s\n", (r.has_hash || r.has_kos) ? (ok ? "PASS" : "FAIL") : "");
     if (update) {
-        r.has_hash = r.has_kos = 1;
+        r.has_hash = r.has_kos = true;
         r.hash = hash;
         for (int t = 0; t < MAX_PLAYERS; t++)
             r.kos[t] = g.kos[t];
@@ -280,13 +280,13 @@ static SDL_Texture *load_rgba(const char *name)
     if (!d || size < 8 || memcmp(d, "RGBA", 4)) {
         fprintf(stderr, "cannot read %s (run `make assets`)\n", path);
         free(d);
-        return NULL;
+        return nullptr;
     }
     int w = d[4] << 8 | d[5], h = d[6] << 8 | d[7];
     if (size != 8u + (uint32_t)w * h * 4) {
         fprintf(stderr, "%s: bad size\n", path);
         free(d);
-        return NULL;
+        return nullptr;
     }
     /* Reduce to RGBA5551 like the N64's RGBA16 textures. */
     for (uint8_t *px = d + 8; px < d + size; px += 4) {
@@ -295,7 +295,7 @@ static SDL_Texture *load_rgba(const char *name)
         px[3] = px[3] >= 128 ? 255 : 0;
     }
     SDL_Texture *t = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, w, h);
-    SDL_UpdateTexture(t, NULL, d + 8, w * 4);
+    SDL_UpdateTexture(t, nullptr, d + 8, w * 4);
     SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
     SDL_SetTextureScaleMode(t, SDL_SCALEMODE_NEAREST);
     free(d);
@@ -314,14 +314,14 @@ static void reload_sheet(int spr, const Game *g)
     }
 }
 
-static void d_blit(void *ctx, int spr, int sx, int sy, int w, int h, int x, int y, int flip)
+static void d_blit([[maybe_unused]] void *ctx, int spr, int sx, int sy, int w, int h, int x, int y,
+                   int flip)
 {
-    (void)ctx;
     SDL_FRect src = {(float)sx, (float)sy, (float)w, (float)h};
     SDL_FRect dst = {(float)x, (float)(y * YS), (float)w, (float)(h * YS)};
     SDL_FlipMode f = (SDL_FlipMode)(((flip & FLIP_X) ? SDL_FLIP_HORIZONTAL : 0) |
                                     ((flip & FLIP_Y) ? SDL_FLIP_VERTICAL : 0));
-    SDL_RenderTextureRotated(ren, sprites[spr], &src, &dst, 0, NULL, f);
+    SDL_RenderTextureRotated(ren, sprites[spr], &src, &dst, 0, nullptr, f);
 }
 
 static void d_blit_tint(void *ctx, int spr, int sx, int sy, int w, int h, int x, int y,
@@ -332,17 +332,15 @@ static void d_blit_tint(void *ctx, int spr, int sx, int sy, int w, int h, int x,
     SDL_SetTextureColorMod(sprites[spr], 255, 255, 255);
 }
 
-static void d_fill(void *ctx, int x, int y, int w, int h, uint32_t c)
+static void d_fill([[maybe_unused]] void *ctx, int x, int y, int w, int h, uint32_t c)
 {
-    (void)ctx;
     SDL_FRect rc = {(float)x, (float)(y * YS), (float)w, (float)(h * YS)};
     SDL_SetRenderDrawColor(ren, (Uint8)(c >> 24), (Uint8)(c >> 16), (Uint8)(c >> 8), (Uint8)c);
     SDL_RenderFillRect(ren, &rc);
 }
 
-static void d_text(void *ctx, int x, int y, const char *s)
+static void d_text([[maybe_unused]] void *ctx, int x, int y, const char *s)
 {
-    (void)ctx;
     /* 8x8 glyphs scaled 2x: TEXT_CW x TEXT_CH sim px per character. */
     SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
     SDL_SetRenderScale(ren, 2, YS);
@@ -350,12 +348,12 @@ static void d_text(void *ctx, int x, int y, const char *s)
     SDL_SetRenderScale(ren, 1, 1);
 }
 
-static const DrawApi draw_api = {d_blit, d_blit_tint, d_fill, NULL, NULL};
+static const DrawApi draw_api = {d_blit, d_blit_tint, d_fill, nullptr, nullptr};
 
 static void text_bg(int x, int y, const char *s)
 {
-    d_fill(NULL, x - 2, y - 1, (int)strlen(s) * TEXT_CW + 4, TEXT_CH + 2, 0x000000a0);
-    d_text(NULL, x, y, s);
+    d_fill(nullptr, x - 2, y - 1, (int)strlen(s) * TEXT_CW + 4, TEXT_CH + 2, 0x000000a0);
+    d_text(nullptr, x, y, s);
 }
 
 /* Q16.16 as a signed decimal with 2 places. */
@@ -470,7 +468,7 @@ static const uint16_t KEY_BITS[7] = {
 
 static void poll_input(InputState in[MAX_PLAYERS])
 {
-    const bool *k = SDL_GetKeyboardState(NULL);
+    const bool *k = SDL_GetKeyboardState(nullptr);
     for (int t = 0; t < MAX_PLAYERS; t++) {
         in[t] = (InputState){t < TEAM_COUNT ? BTN_CONNECTED : 0, 0, 0};
         for (int i = 0; i < 7 && t < TEAM_COUNT; i++)
@@ -488,12 +486,12 @@ static void poll_input(InputState in[MAX_PLAYERS])
 int main(int argc, char **argv)
 {
     long max_frames = -1;
-    const char *level_arg = NULL, *record_path = NULL, *replay_path = NULL, *shot_path = NULL;
-    const char *dump_dir = NULL;
+    const char *level_arg = nullptr, *record_path = nullptr, *replay_path = nullptr, *shot_path = nullptr;
+    const char *dump_dir = nullptr;
     unsigned long dumped = (unsigned long)-1;
-    int headless = 0, check = 0, update = 0, trace = 0, mute = 0, fullscreen = 0;
+    bool headless = false, check = false, update = false, trace = false, mute = false, fullscreen = false;
     uint32_t hash = core_selftest();
-    int pass = hash == CORE_SELFTEST_EXPECTED;
+    bool pass = hash == CORE_SELFTEST_EXPECTED;
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
@@ -501,27 +499,27 @@ int main(int argc, char **argv)
             printf("core_selftest=%08lx %s\n", (unsigned long)hash, pass ? "PASS" : "FAIL");
             return pass ? 0 : 1;
         } else if (!strcmp(a, "--frames") && i + 1 < argc) {
-            max_frames = strtol(argv[++i], NULL, 10);
+            max_frames = strtol(argv[++i], nullptr, 10);
         } else if (!strcmp(a, "--assets") && i + 1 < argc) {
             assets_dir = argv[++i];
         } else if (!strcmp(a, "--level") && i + 1 < argc) {
             level_arg = argv[++i];
         } else if (!strcmp(a, "--mute")) {
-            mute = 1;
+            mute = true;
         } else if (!strcmp(a, "--fullscreen")) {
-            fullscreen = 1;
+            fullscreen = true;
         } else if (!strcmp(a, "--record") && i + 1 < argc) {
             record_path = argv[++i];
         } else if (!strcmp(a, "--replay") && i + 1 < argc) {
             replay_path = argv[++i];
         } else if (!strcmp(a, "--headless")) {
-            headless = 1;
+            headless = true;
         } else if (!strcmp(a, "--check")) {
-            check = 1;
+            check = true;
         } else if (!strcmp(a, "--update")) {
-            update = 1;
+            update = true;
         } else if (!strcmp(a, "--trace")) {
-            trace = 1;
+            trace = true;
         } else if (!strcmp(a, "--screenshot") && i + 1 < argc) {
             shot_path = argv[++i];
         } else if (!strcmp(a, "--dump-frames") && i + 1 < argc) {
@@ -546,7 +544,7 @@ int main(int argc, char **argv)
     load_level_list();
     Replay playback = {0};
     size_t playback_pos = 0;
-    int playing = 0;
+    bool playing = false;
     PlayerTuning tuning;
     tuning_defaults(&tuning);
     uint8_t abilities = ABIL_ALL;
@@ -555,7 +553,7 @@ int main(int argc, char **argv)
         if (replay_load(&playback, replay_path))
             return 2;
         level_arg = playback.level;
-        playing = 1;
+        playing = true;
     }
     if (!level_arg && level_count == 0) {
         fprintf(stderr, "no levels in %s/levels/levels.txt (run `make assets`)\n", assets_dir);
@@ -605,17 +603,18 @@ int main(int argc, char **argv)
     if (record_path)
         replay_init(&rec, cur_level, g.abilities, &g.tuning);
 
-    int debug = 0, tuning_open = 0, sel = 0, frozen = 0, step = 0;
+    bool debug = false, tuning_open = false, frozen = false, step = false;
+    int sel = 0;
     Uint64 next = SDL_GetTicksNS();
     const Uint64 tick_ns = 1000000000ull / 60;
     long frames = 0;
-    int running = 1;
+    bool running = true;
     while (running && (max_frames < 0 || frames < max_frames)) {
         SDL_Event ev;
-        int restart = 0;
+        bool restart = false;
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_EVENT_QUIT) {
-                running = 0;
+                running = false;
             } else if (ev.type == SDL_EVENT_GAMEPAD_ADDED) {
                 for (int i = 0; i < MAX_PLAYERS; i++)
                     if (!pads[i]) {
@@ -626,28 +625,28 @@ int main(int argc, char **argv)
                 for (int i = 0; i < MAX_PLAYERS; i++)
                     if (pads[i] && SDL_GetGamepadID(pads[i]) == ev.gdevice.which) {
                         SDL_CloseGamepad(pads[i]);
-                        pads[i] = NULL;
+                        pads[i] = nullptr;
                     }
             } else if (ev.type == SDL_EVENT_KEY_DOWN) {
                 SDL_Keycode key = ev.key.key;
-                int big = (ev.key.mod & SDL_KMOD_SHIFT) != 0;
+                bool big = (ev.key.mod & SDL_KMOD_SHIFT) != 0;
                 int32_t *field = (int32_t *)((char *)&g.tuning + tuning_fields[sel].offset);
                 int32_t delta = tuning_fields[sel].is_fx ? 0x400 : 1;
-                if (key == SDLK_ESCAPE) running = 0;
+                if (key == SDLK_ESCAPE) running = false;
                 else if (key == SDLK_F11 || (key == SDLK_RETURN && (ev.key.mod & SDL_KMOD_ALT)))
                     SDL_SetWindowFullscreen(win, !(SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN));
                 else if (key == SDLK_F1) debug = !debug;
                 else if (key == SDLK_F2) tuning_open = !tuning_open;
                 else if (key == SDLK_P) frozen = !frozen;
-                else if (key == SDLK_N && frozen) step = 1;
-                else if (key == SDLK_BACKSPACE) restart = 1;
+                else if (key == SDLK_N && frozen) step = true;
+                else if (key == SDLK_BACKSPACE) restart = true;
                 else if (key == SDLK_TAB && level_count > 1) {
                     int li = 0;
                     while (li < level_count && strcmp(level_names[li], cur_level))
                         li++;
                     snprintf(cur_level, sizeof cur_level, "%s", level_names[(li + 1) % level_count]);
                     if (load_level(cur_level) == 0)
-                        restart = 1;
+                        restart = true;
                 } else if (tuning_open && key == SDLK_LEFTBRACKET) {
                     sel = (sel + tuning_field_count - 1) % tuning_field_count;
                 } else if (tuning_open && key == SDLK_RIGHTBRACKET) {
@@ -672,7 +671,7 @@ int main(int argc, char **argv)
                 replay_free(&rec);
                 replay_init(&rec, cur_level, g.abilities, &t);
             }
-            playing = 0;
+            playing = false;
         }
 
         /* Fixed 60 Hz simulation, independent of the display refresh. */
@@ -683,7 +682,7 @@ int main(int argc, char **argv)
             next += tick_ns;
             if (frozen && !step)
                 continue;
-            step = 0;
+            step = false;
             InputState in[MAX_PLAYERS];
             poll_input(in);
             if (playing) {
@@ -693,7 +692,7 @@ int main(int argc, char **argv)
                     playback_pos++;
                     cpu_play(&g, playback.cpu, in);
                 } else {
-                    playing = 0;
+                    playing = false;
                     printf("replay done: frame %lu hash %08lx\n", (unsigned long)g.frame,
                            (unsigned long)game_hash(&g));
                 }
@@ -740,16 +739,16 @@ int main(int argc, char **argv)
         if (frozen)
             text_bg(VIEW_W / 2 - 3 * TEXT_CW, VIEW_H - 16, "FROZEN");
         if (shot_path && max_frames >= 0 && frames >= max_frames) {
-            SDL_Surface *s = SDL_RenderReadPixels(ren, NULL);
+            SDL_Surface *s = SDL_RenderReadPixels(ren, nullptr);
             if (!s || !SDL_SaveBMP(s, shot_path))
                 fprintf(stderr, "screenshot: %s\n", SDL_GetError());
             SDL_DestroySurface(s);
-            shot_path = NULL;
+            shot_path = nullptr;
         }
         if (dump_dir && (unsigned long)frames != dumped) {
             char path[512];
             snprintf(path, sizeof path, "%s/%05lu.bmp", dump_dir, (unsigned long)frames);
-            SDL_Surface *s = SDL_RenderReadPixels(ren, NULL);
+            SDL_Surface *s = SDL_RenderReadPixels(ren, nullptr);
             if (!s || !SDL_SaveBMP(s, path))
                 fprintf(stderr, "dump-frames: %s\n", SDL_GetError());
             SDL_DestroySurface(s);
@@ -759,7 +758,7 @@ int main(int argc, char **argv)
     }
 
     if (record_path) {
-        rec.has_hash = rec.has_kos = 1;
+        rec.has_hash = rec.has_kos = true;
         rec.hash = game_hash(&g);
         rec.players = g.player_count;
         for (int t = 0; t < MAX_PLAYERS; t++)

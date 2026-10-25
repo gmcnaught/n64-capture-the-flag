@@ -54,7 +54,8 @@ typedef struct {
     char move[48];
 } Node;
 
-static int game_mode, side;
+static bool game_mode;
+static int side;
 static Level lv;
 static PlayerTuning tun;
 static int targets[3][4], ntargets;     /* target rectangles: home flags or a goal */
@@ -62,21 +63,21 @@ static int rest_x0, rest_x1, rest_y = -1, ride = -1;
 static Node nodes[MAX_NODES];
 static int nnodes;
 
-static int touches(const Body *b)
+static bool touches(const Body *b)
 {
     for (int i = 0; i < ntargets; i++) {
         int *r = targets[i];
         if (b->x < r[0] + r[2] && b->x + b->w > r[0] && b->y < r[1] + r[3] && b->y + b->h > r[1])
-            return 1;
+            return true;
     }
-    return 0;
+    return false;
 }
 
 static uint16_t prev;
 static Game sim;                /* game_mode: the game the move runs in */
 
-/* One frame with held input. 0 if the player was squished or hurt (game_mode). */
-static int tick(Player *p, uint16_t held)
+/* One frame with held input. false if the player was squished or hurt (game_mode). */
+static bool tick(Player *p, uint16_t held)
 {
     if (game_mode) {
         InputState in[MAX_PLAYERS] = {{BTN_CONNECTED, 0, 0}, {BTN_CONNECTED, 0, 0}};
@@ -89,73 +90,73 @@ static int tick(Player *p, uint16_t held)
     uint16_t pressed = held & (uint16_t)~prev;
     prev = held;
     player_tick(p, &lv, &tun, &in, pressed);
-    return 1;
+    return true;
 }
 
 enum { K_FALL, K_JUMP, K_DROP, K_DOUBLE };
 
-/* Simulate one move from rest in node from. Returns 1 if it ends at rest
- * (state in *out, and in sim for game_mode) or touches the target (*hit =
- * 1), 0 if it fails. */
-static int simulate(const Node *from, int dir, int txs, int kind, int k, int air_same,
-                    Player *out, int *hit)
+/* Simulate one move from rest in node from. Returns true if it ends at rest
+ * (state in *out, and in sim for game_mode) or touches the target (*hit set),
+ * false if it fails. */
+static bool simulate(const Node *from, int dir, int txs, int kind, int k, bool air_same,
+                     Player *out, bool *hit)
 {
     Player p = from->p;
     if (game_mode)
         sim = from->g;
     prev = 0;
-    *hit = 0;
+    *hit = false;
     uint16_t d = dir < 0 ? BTN_LEFT : BTN_RIGHT;
     uint16_t air = air_same ? d : 0;
     int f = 0;
     if (!tick(&p, 0) || !p.grounded)
-        return 0;
+        return false;
     while (dir < 0 ? p.body.x > txs : p.body.x < txs) {
         if (!tick(&p, d))
-            return 0;
-        if (touches(&p.body)) { *hit = 1; goto done; }
+            return false;
+        if (touches(&p.body)) { *hit = true; goto done; }
         if (++f > 300 || p.body.y >= lv.px_h)
-            return 0;
+            return false;
         if (p.body.vx == 0 && p.grounded && f > 4)
-            return 0;               /* blocked by a wall */
+            return false;               /* blocked by a wall */
     }
     if (kind == K_DROP) {
         if (!p.grounded)
-            return 0;
+            return false;
         if (!tick(&p, BTN_DOWN) || !tick(&p, BTN_DOWN) || !tick(&p, BTN_DOWN | BTN_JUMP) ||
             !tick(&p, BTN_DOWN | BTN_JUMP))
-            return 0;
+            return false;
     }
     for (int j = 0; j < 400; j++) {
         uint16_t h = air;
         if (kind == K_JUMP || (kind == K_DOUBLE && (j < k - 1 || j >= k)))
             h |= BTN_JUMP;
         if (!tick(&p, h))
-            return 0;
-        if (touches(&p.body)) { *hit = 1; goto done; }
+            return false;
+        if (touches(&p.body)) { *hit = true; goto done; }
         if (p.body.y >= lv.px_h)
-            return 0;
+            return false;
         if (p.grounded && j > 1)
             break;
     }
     if (!p.grounded)
-        return 0;
+        return false;
     for (int j = 0; j < 60 && (p.body.vx || !p.grounded); j++) {
         if (!tick(&p, 0))
-            return 0;
-        if (touches(&p.body)) { *hit = 1; goto done; }
+            return false;
+        if (touches(&p.body)) { *hit = true; goto done; }
     }
 done:
     *out = p;
-    return 1;
+    return true;
 }
 
-static int seen(int x, int y)
+static bool seen(int x, int y)
 {
     for (int i = 0; i < nnodes; i++)
         if (nodes[i].p.body.y == y && abs(nodes[i].p.body.x - x) < QX)
-            return 1;
-    return 0;
+            return true;
+    return false;
 }
 
 static void print_path(int i)
@@ -234,7 +235,7 @@ int main(int argc, char **argv)
                         int kk = kind >= K_DOUBLE ? K_DOUBLE : kind;
                         int k = kind >= K_DOUBLE ? ks[kind - K_DOUBLE] : 0;
                         Player res;
-                        int hit;
+                        bool hit;
                         if (!simulate(cur, dir, txs, kk, k, air_same, &res, &hit))
                             continue;
                         int16_t ox = res.body.x, oy = res.body.y;

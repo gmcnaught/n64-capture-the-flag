@@ -82,37 +82,37 @@ uint16_t level_tile(const Level *lv, int layer, int cx, int cy)
     return be16(l + 4 + 2 * (cy * lv->cell_w + cx));
 }
 
-int level_box_solid(const Level *lv, int x, int y, int w, int h)
+bool level_box_solid(const Level *lv, int x, int y, int w, int h)
 {
     for (int i = 0; i < lv->solid_count; i++) {
         const Solid *s = &lv->solids[i];
         if (s->active && !s->oneway && x < s->x + s->w && x + w > s->x && y < s->y + s->h &&
             y + h > s->y)
-            return 1;
+            return true;
     }
     return level_box_has(lv, x, y, w, h, CELL_SOLID);
 }
 
-int level_box_has(const Level *lv, int x, int y, int w, int h, uint8_t cell)
+bool level_box_has(const Level *lv, int x, int y, int w, int h, uint8_t cell)
 {
     int cx0 = cell_x(x), cx1 = cell_x(x + w - 1);
     int cy0 = cell_y(y), cy1 = cell_y(y + h - 1);
     for (int cy = cy0; cy <= cy1; cy++)
         for (int cx = cx0; cx <= cx1; cx++)
             if (level_cell(lv, cx, cy) == cell)
-                return 1;
-    return 0;
+                return true;
+    return false;
 }
 
-int level_cell_platform(const Level *lv, int cx, int cy)
+bool level_cell_platform(const Level *lv, int cx, int cy)
 {
     uint8_t c = level_cell(lv, cx, cy);
     if (c == CELL_ONEWAY)
-        return 1;
+        return true;
     return c == CELL_LADDER && level_cell(lv, cx, cy - 1) != CELL_LADDER;
 }
 
-int level_box_hazard(const Level *lv, int x, int y, int w, int h)
+bool level_box_hazard(const Level *lv, int x, int y, int w, int h)
 {
     int cx0 = cell_x(x), cx1 = cell_x(x + w - 1);
     int cy0 = cell_y(y), cy1 = cell_y(y + h - 1);
@@ -129,8 +129,8 @@ int level_box_hazard(const Level *lv, int x, int y, int w, int h)
             else if (level_cell(lv, cx + 1, cy) == CELL_SOLID)  { hx0 = TILE_W / 2; hx1 = TILE_W; }
             int ox = cx * TILE_W, oy = cy * TILE_H;
             if (x < ox + hx1 && x + w > ox + hx0 && y < oy + hy1 && y + h > oy + hy0)
-                return 1;
+                return true;
         }
     }
-    return 0;
+    return false;
 }

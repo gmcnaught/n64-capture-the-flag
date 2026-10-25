@@ -111,7 +111,7 @@ neighbors), so LDtk's own tile layers only show in the editor.
 
 ## How it works
 
-One integer-only C99 core runs the game on both platforms: movement,
+One integer-only C23 core runs the game on both platforms: movement,
 collision, flags and rounds. CPU players (`core/bot.c`) find their way
 with A* over a graph of each stage's standing spots and the jumps, falls
 and platform rides between them, found by running the real movement code

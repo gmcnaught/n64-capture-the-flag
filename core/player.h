@@ -35,7 +35,7 @@ typedef struct {
 typedef struct {
     const char *name;
     uint16_t offset;    /* offsetof(PlayerTuning, field) */
-    uint8_t is_fx;
+    bool is_fx;
 } TuningField;
 
 extern const TuningField tuning_fields[];
@@ -50,9 +50,9 @@ extern const int tuning_field_count;
 fx belt_push(const Body *b, const Level *lv, const PlayerTuning *t);
 void tuning_defaults(PlayerTuning *t);
 
-enum { PS_NORMAL, PS_DASH, PS_CLIMB, PS_HURT };
+typedef enum : uint8_t { PS_NORMAL, PS_DASH, PS_CLIMB, PS_HURT } PlayerState;
 
-enum { ATK_SIDE, ATK_UP, ATK_DOWN };
+typedef enum : uint8_t { ATK_SIDE, ATK_UP, ATK_DOWN } AttackDir;
 
 /* Defensive modifiers (game design §4.1); saved, part of the hash. */
 enum { MOD_SHIELD = 1 << 0 };
@@ -89,16 +89,16 @@ enum { ANIM_IDLE, ANIM_RUN, ANIM_JUMP, ANIM_CLIMB, ANIM_DEATH, ANIM_HURT, ANIM_A
 
 typedef struct {
     Body body;
-    uint8_t state;
+    PlayerState state;
     int8_t facing;              /* -1 left, +1 right */
     uint8_t abilities;
     uint8_t health;
-    uint8_t grounded;           /* standing on solid or platform this frame */
+    bool grounded;              /* standing on solid or platform this frame */
     int8_t wall_dir;            /* wall within reach while airborne, or 0 */
-    uint8_t wall_sliding;
+    bool wall_sliding;
     uint8_t air_jumps, air_dashes;
     uint8_t coyote, jump_buffer;
-    uint8_t jumping;            /* rising from a jump that can still be cut */
+    bool jumping;               /* rising from a jump that can still be cut */
     uint8_t wall_lock;          /* frames of ignored horizontal input */
     uint8_t drop;               /* frames of ignoring platforms */
     uint8_t ladder_lock;        /* frames before a ladder can be grabbed */
@@ -107,15 +107,15 @@ typedef struct {
     uint8_t hurt_timer, invuln;
     uint8_t land_timer;
     uint8_t attack_timer;       /* counts down from attack_frames */
-    uint8_t attack_dir;         /* ATK_* */
+    AttackDir attack_dir;
     uint8_t attack_cooldown;
     uint8_t attack_id;          /* increments per swing; targets are hit once per swing */
-    uint8_t attack_pogo;        /* this swing already bounced */
+    bool attack_pogo;           /* this swing already bounced */
     uint8_t knock;              /* frames of knockback (no control) */
     uint8_t modifiers;          /* MOD_* */
-    uint8_t shield;             /* shield charged */
+    bool shield;                /* shield charged */
     uint16_t shield_timer;      /* frames until the shield recharges */
-    uint8_t dead;               /* health ran out; the game respawns at the save point */
+    bool dead;                  /* health ran out; the game respawns at the save point */
     fx push_x;                  /* external horizontal push this frame (wind), set by the game */
     int16_t safe_x, safe_y;     /* last safe ground (hazard respawn) */
     uint8_t anim, anim_frame;
@@ -131,15 +131,15 @@ void player_tick(Player *p, const Level *lv, const PlayerTuning *t,
 void player_hurt(Player *p, const PlayerTuning *t);
 /* Enemy hit from side dir (-1: pushed left, +1: pushed right): lose a pip
  * (or the shield) and get knocked back. Ignored while invulnerable. Returns
- * 1 if the hit landed. The last pip goes through player_hurt (death). */
-int player_damage(Player *p, const PlayerTuning *t, int dir);
+ * true if the hit landed. The last pip goes through player_hurt (death). */
+bool player_damage(Player *p, const PlayerTuning *t, int dir);
 /* Launch upward (jump pad); refreshes the air dash (not the double jump). */
 void player_launch(Player *p, fx speed);
 /* Down-hit bounce; refreshes the air dash (not the double jump). */
 void player_pogo(Player *p, const PlayerTuning *t);
-/* Hitbox of the active attack, px. Returns 0 when no hitbox is active. */
-int player_attack_box(const Player *p, const PlayerTuning *t, int *x, int *y, int *w, int *h);
+/* Hitbox of the active attack, px. Returns false when no hitbox is active. */
+bool player_attack_box(const Player *p, const PlayerTuning *t, int *x, int *y, int *w, int *h);
 /* Place at (x, y) with velocity kept or cleared, ending any special state. */
-void player_place(Player *p, int16_t x, int16_t y, int keep_velocity);
+void player_place(Player *p, int16_t x, int16_t y, bool keep_velocity);
 
 #endif

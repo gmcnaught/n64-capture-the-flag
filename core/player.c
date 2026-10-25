@@ -43,7 +43,7 @@ static fx fx_abs(fx v) { return v < 0 ? -v : v; }
 static int center_cell_x(const Body *b) { return (b->x + b->w / 2) >> TILE_SHIFT_X; }
 
 /* Either foot on an ice cell. */
-static int on_ice(const Body *b, const Level *lv)
+static bool on_ice(const Body *b, const Level *lv)
 {
     int cy = (b->y + b->h) >> TILE_SHIFT_Y;
     return level_surface(lv, b->x >> TILE_SHIFT_X, cy) == SURFACE_ICE ||
@@ -62,29 +62,29 @@ fx belt_push(const Body *b, const Level *lv, const PlayerTuning *t)
     return 0;
 }
 
-static int overlaps_ladder(const Body *b, const Level *lv)
+static bool overlaps_ladder(const Body *b, const Level *lv)
 {
     int cx = center_cell_x(b);
     for (int cy = b->y >> TILE_SHIFT_Y; cy <= (b->y + b->h - 1) >> TILE_SHIFT_Y; cy++)
         if (level_cell(lv, cx, cy) == CELL_LADDER)
-            return 1;
-    return 0;
+            return true;
+    return false;
 }
 
-static int ladder_below(const Body *b, const Level *lv)
+static bool ladder_below(const Body *b, const Level *lv)
 {
     return level_cell(lv, center_cell_x(b), (b->y + b->h) >> TILE_SHIFT_Y) == CELL_LADDER;
 }
 
-static int wall_near(const Body *b, const Level *lv, int dir, int reach)
+static bool wall_near(const Body *b, const Level *lv, int dir, int reach)
 {
     for (int d = 1; d <= reach; d++)
         if (level_box_solid(lv, b->x + dir * d, b->y, b->w, b->h))
-            return 1;
-    return 0;
+            return true;
+    return false;
 }
 
-static int on_ground(const Player *p, const Level *lv)
+static bool on_ground(const Player *p, const Level *lv)
 {
     return body_on_solid(&p->body, lv) || (!p->drop && body_on_platform(&p->body, lv));
 }
@@ -104,7 +104,7 @@ static void refill(Player *p)
 
 void player_spawn(Player *p, int16_t x, int16_t y, uint8_t abilities, uint8_t modifiers)
 {
-    *p = (Player){0};
+    *p = (Player){};
     p->body.x = x;
     p->body.y = y;
     p->body.w = PLAYER_HIT_W;
@@ -119,7 +119,7 @@ void player_spawn(Player *p, int16_t x, int16_t y, uint8_t abilities, uint8_t mo
     refill(p);
 }
 
-void player_place(Player *p, int16_t x, int16_t y, int keep_velocity)
+void player_place(Player *p, int16_t x, int16_t y, bool keep_velocity)
 {
     Body *b = &p->body;
     b->x = x;
@@ -195,7 +195,7 @@ static void respawn(Player *p, const PlayerTuning *t)
 {
     Body *b = &p->body;
     if (p->health == 0) {
-        p->dead = 1;
+        p->dead = true;
         p->state = PS_NORMAL;
         return;
     }
@@ -204,26 +204,27 @@ static void respawn(Player *p, const PlayerTuning *t)
     b->vx = b->vy = b->rem_x = b->rem_y = 0;
     p->state = PS_NORMAL;
     p->invuln = (uint8_t)t->invuln_frames;
-    p->jumping = p->jump_buffer = p->wall_lock = p->drop = p->knock = 0;
+    p->jumping = false;
+    p->jump_buffer = p->wall_lock = p->drop = p->knock = 0;
     p->dash_cooldown = 0;
     p->attack_timer = 0;
     refill(p);
 }
 
 /* Take one hit: the shield absorbs it if charged, else lose a pip. Returns
- * 1 if a pip was lost. */
-static int take_hit(Player *p, const PlayerTuning *t)
+ * true if a pip was lost. */
+static bool take_hit(Player *p, const PlayerTuning *t)
 {
     p->shield_timer = (uint16_t)t->shield_recharge;   /* recharge restarts on any hit */
     if (p->shield) {
-        p->shield = 0;
+        p->shield = false;
         p->sfx |= SFX_BIT(SFX_SHIELD);
-        return 0;
+        return false;
     }
     if (p->health)
         p->health--;
     p->sfx |= SFX_BIT(SFX_HURT);
-    return 1;
+    return true;
 }
 
 void player_hurt(Player *p, const PlayerTuning *t)
@@ -237,13 +238,13 @@ void player_hurt(Player *p, const PlayerTuning *t)
     p->attack_timer = 0;
 }
 
-int player_damage(Player *p, const PlayerTuning *t, int dir)
+bool player_damage(Player *p, const PlayerTuning *t, int dir)
 {
     if (p->invuln || p->state == PS_HURT || p->dead)
-        return 0;
+        return false;
     if (!p->shield && p->health <= 1) {
         player_hurt(p, t);          /* last pip: death animation, then dead */
-        return 1;
+        return true;
     }
     take_hit(p, t);
     p->state = PS_NORMAL;
@@ -252,27 +253,28 @@ int player_damage(Player *p, const PlayerTuning *t, int dir)
     p->body.rem_x = 0;
     p->knock = (uint8_t)t->knock_frames;
     p->invuln = (uint8_t)t->invuln_frames;
-    p->jumping = p->jump_buffer = 0;
+    p->jumping = false;
+    p->jump_buffer = 0;
     p->attack_timer = 0;
-    return 1;
+    return true;
 }
 
 void player_pogo(Player *p, const PlayerTuning *t)
 {
     p->state = PS_NORMAL;
     p->body.vy = -t->pogo_speed;
-    p->jumping = 0;
-    p->attack_pogo = 1;
+    p->jumping = false;
+    p->attack_pogo = true;
     p->dash_cooldown = 0;
     p->sfx |= SFX_BIT(SFX_POGO);
     refill_dash(p);
 }
 
-int player_attack_box(const Player *p, const PlayerTuning *t, int *x, int *y, int *w, int *h)
+bool player_attack_box(const Player *p, const PlayerTuning *t, int *x, int *y, int *w, int *h)
 {
     const Body *b = &p->body;
     if (p->attack_timer <= t->attack_frames - t->attack_active)
-        return 0;
+        return false;
     switch (p->attack_dir) {
     case ATK_UP:
         *x = b->x - 4; *y = b->y - 10; *w = b->w + 8; *h = 12;
@@ -284,7 +286,7 @@ int player_attack_box(const Player *p, const PlayerTuning *t, int *x, int *y, in
         *x = p->facing > 0 ? b->x + b->w : b->x - 16; *y = b->y + 3; *w = 16; *h = 10;
         break;
     }
-    return 1;
+    return true;
 }
 
 void player_launch(Player *p, fx speed)
@@ -293,14 +295,14 @@ void player_launch(Player *p, fx speed)
         return;
     p->state = PS_NORMAL;
     p->body.vy = -speed;
-    p->jumping = 0;
+    p->jumping = false;
     p->coyote = p->jump_buffer = 0;
     p->dash_cooldown = 0;
     p->sfx |= SFX_BIT(SFX_PAD);
     refill_dash(p);
 }
 
-static void end_dash(Player *p, const PlayerTuning *t, int hit_wall)
+static void end_dash(Player *p, const PlayerTuning *t, bool hit_wall)
 {
     p->state = PS_NORMAL;
     p->body.vx = hit_wall ? 0 : p->dash_dir * t->run_speed;
@@ -316,7 +318,7 @@ static void start_climb(Player *p, const Level *lv)
     b->x = x;
     b->vx = b->vy = b->rem_x = 0;
     p->state = PS_CLIMB;
-    p->jumping = 0;
+    p->jumping = false;
     refill_dash(p);
 }
 
@@ -334,7 +336,7 @@ void player_tick(Player *p, const Level *lv, const PlayerTuning *t,
     if (p->attack_cooldown)
         p->attack_cooldown--;
     if ((p->modifiers & MOD_SHIELD) && !p->shield && (p->shield_timer == 0 || --p->shield_timer == 0))
-        p->shield = 1;
+        p->shield = true;
     if (p->dead)
         return;
     if (p->state == PS_HURT) {
@@ -358,13 +360,13 @@ void player_tick(Player *p, const Level *lv, const PlayerTuning *t,
         p->jump_buffer = 0;
     }
 
-    int on_solid = body_on_solid(b, lv);
-    int on_plat = !p->drop && body_on_platform(b, lv);
+    bool on_solid = body_on_solid(b, lv);
+    bool on_plat = !p->drop && body_on_platform(b, lv);
     p->grounded = (on_solid || on_plat) && b->vy >= 0 && p->state != PS_CLIMB;
     fx push = p->push_x + (p->grounded ? belt_push(b, lv, t) : 0);  /* wind, belt */
     if (p->grounded) {
         p->coyote = (uint8_t)t->coyote_frames;
-        p->jumping = 0;
+        p->jumping = false;
         if (p->state != PS_DASH)
             refill(p);
     } else if (p->coyote) {
@@ -410,7 +412,7 @@ void player_tick(Player *p, const Level *lv, const PlayerTuning *t,
         } else {
             int vdir = ((held & BTN_DOWN) != 0) - ((held & BTN_UP) != 0);
             b->vy = vdir * t->climb_speed;
-            if (body_move_y(b, b->vy, lv, 0)) {
+            if (body_move_y(b, b->vy, lv, false)) {
                 b->vy = 0;
                 if (vdir > 0)
                     p->state = PS_NORMAL;
@@ -433,7 +435,7 @@ void player_tick(Player *p, const Level *lv, const PlayerTuning *t,
         p->dash_dir = (int8_t)(dir ? dir : p->facing);
         p->facing = p->dash_dir;
         p->dash_timer = (uint8_t)t->dash_frames;
-        p->jumping = 0;
+        p->jumping = false;
         p->wall_lock = 0;
         p->attack_timer = 0;
         b->rem_x = 0;           /* exact distance: dash_frames * speed - decel terms */
@@ -446,7 +448,7 @@ void player_tick(Player *p, const Level *lv, const PlayerTuning *t,
             /* Fast start, slowing by dash_decel each frame. */
             b->vy = 0;
             b->vx = p->dash_dir * (t->dash_speed - t->dash_decel * (t->dash_frames - p->dash_timer));
-            int hit = body_move_x(b, b->vx + push, lv);
+            bool hit = body_move_x(b, b->vx + push, lv);
             if (hit || --p->dash_timer == 0)
                 end_dash(p, t, hit);
             p->grounded = on_ground(p, lv);
@@ -462,7 +464,7 @@ void player_tick(Player *p, const Level *lv, const PlayerTuning *t,
         p->attack_dir = (held & BTN_UP) ? ATK_UP
                       : ((held & BTN_DOWN) && !p->grounded) ? ATK_DOWN : ATK_SIDE;
         p->attack_id++;
-        p->attack_pogo = 0;
+        p->attack_pogo = false;
         p->sfx |= SFX_BIT(SFX_ATTACK);
     }
 
@@ -473,7 +475,7 @@ void player_tick(Player *p, const Level *lv, const PlayerTuning *t,
             p->jump_buffer = p->coyote = 0;
         } else if (p->coyote) {
             b->vy = -t->jump_speed;
-            p->jumping = 1;
+            p->jumping = true;
             p->jump_buffer = p->coyote = 0;
             p->sfx |= SFX_BIT(SFX_JUMP);
         } else if (p->wall_dir) {
@@ -481,13 +483,13 @@ void player_tick(Player *p, const Level *lv, const PlayerTuning *t,
             b->vx = -p->wall_dir * t->wall_jump_x;
             p->facing = (int8_t)-p->wall_dir;
             p->wall_lock = (uint8_t)t->wall_jump_lock;
-            p->jumping = 1;
+            p->jumping = true;
             p->jump_buffer = 0;
             p->sfx |= SFX_BIT(SFX_JUMP);
         } else if (p->air_jumps) {
             p->air_jumps--;
             b->vy = -t->double_jump_speed;
-            p->jumping = 1;
+            p->jumping = true;
             p->jump_buffer = 0;
             p->sfx |= SFX_BIT(SFX_DOUBLE_JUMP);
         }
@@ -497,8 +499,8 @@ void player_tick(Player *p, const Level *lv, const PlayerTuning *t,
     if (p->wall_lock) {
         p->wall_lock--;
     } else if (!p->knock) {
-        int speeding_up = target != 0 && (b->vx == 0 || (b->vx > 0) == (target > 0)) &&
-                          fx_abs(b->vx) <= fx_abs(target);
+        bool speeding_up = target != 0 && (b->vx == 0 || (b->vx > 0) == (target > 0)) &&
+                           fx_abs(b->vx) <= fx_abs(target);
         fx a = !p->grounded  ? (speeding_up ? t->air_accel : t->air_decel)
                : on_ice(b, lv) ? (speeding_up ? t->ice_accel : t->ice_decel)
                                : (speeding_up ? t->run_accel : t->run_decel);
@@ -511,24 +513,24 @@ void player_tick(Player *p, const Level *lv, const PlayerTuning *t,
      * slide, terminal velocity. */
     if (p->jumping && !(held & BTN_JUMP) && b->vy < -t->jump_cut) {
         b->vy = -t->jump_cut;
-        p->jumping = 0;
+        p->jumping = false;
     }
     if (b->vy >= 0)
-        p->jumping = 0;
+        p->jumping = false;
     fx g = t->gravity;
     if ((held & BTN_JUMP) && fx_abs(b->vy) < t->apex_threshold)
         g /= 2;
     b->vy += g;
-    p->wall_sliding = 0;
+    p->wall_sliding = false;
     if (p->wall_dir && dir == p->wall_dir && b->vy > 0) {
-        p->wall_sliding = 1;
+        p->wall_sliding = true;
         if (b->vy > t->wall_slide_max)
             b->vy = t->wall_slide_max;
     }
     if (b->vy > t->fall_max)
         b->vy = t->fall_max;
 
-    int was_grounded = p->grounded;
+    bool was_grounded = p->grounded;
     fx fall = b->vy;
     if (body_move_x(b, b->vx + push, lv))
         b->vx = 0;

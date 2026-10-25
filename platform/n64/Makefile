@@ -13,7 +13,8 @@ N64_ROM_EXPANSIONPAK = required
 include $(N64_INST)/include/n64.mk
 
 COMMON_DIR := ../common
-N64_CFLAGS += -I$(CORE_DIR) -I$(COMMON_DIR) $(EXTRA_CFLAGS)
+# C23 (n64.mk sets gnu17; the later -std wins).
+N64_CFLAGS += -std=gnu23 -I$(CORE_DIR) -I$(COMMON_DIR) $(EXTRA_CFLAGS)
 # The release ROM (ctf.z64) is built with NDEBUG: libdragon drops debugf,
 # assertf and the SD log (src/main.c). The replay-test (ctf-test) and
 # frame-log (ctf-log) ROMs keep them.

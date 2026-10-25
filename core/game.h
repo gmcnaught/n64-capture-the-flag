@@ -107,9 +107,9 @@ typedef struct {
     int16_t x, y, w, h;
     int32_t peak;                   /* fx px/frame, sign = first gust direction */
     uint16_t cycle, gust, phase;
-    uint8_t alternate;              /* each gust the other way */
-    uint8_t dust;                   /* drawn as a dust storm (else streaks; render only) */
-    uint8_t up;                     /* a geyser: force pushes up (px/frame^2) */
+    bool alternate;                 /* each gust the other way */
+    bool dust;                      /* drawn as a dust storm (else streaks; render only) */
+    bool up;                        /* a geyser: force pushes up (px/frame^2) */
     int32_t force;                  /* fx px/frame pushing right (negative: left) this frame;
                                      * a geyser: upward, px/frame^2 */
     int8_t dir;                     /* direction of the current or next gust: 1 right, -1 left */
@@ -143,16 +143,16 @@ typedef struct {
 #define WATER_GRACE 30          /* frames the releaser is not caught */
 #define WATER_OVERHANG 3        /* cells the stream may run on past an edge */
 
-enum { FS_HOME, FS_CARRIED, FS_DROPPED, FS_PLACED };
+typedef enum : uint8_t { FS_HOME, FS_CARRIED, FS_DROPPED, FS_PLACED } FlagState;
 enum { MENU_RESUME, MENU_CONTROLS, MENU_RESTART, MENU_QUIT, MENU_COUNT };   /* pause menu items */
-enum { PAUSE_MENU = 1, PAUSE_CONTROLS };    /* Game.paused, when nonzero */
-enum { TITLE_SCREEN = 1, TITLE_SETUP };    /* Game.title, when nonzero */
+typedef enum : uint8_t { PAUSE_NONE, PAUSE_MENU, PAUSE_CONTROLS } PauseScreen;
+typedef enum : uint8_t { TITLE_NONE, TITLE_SCREEN, TITLE_SETUP } TitleScreen;   /* TITLE_NONE: play */
 enum { SETUP_STAGE, SETUP_PLAYERS, SETUP_CPU, SETUP_ROWS };    /* setup screen rows */
 
 typedef struct {
     Body body;                  /* position; falls while dropped */
     uint8_t team;               /* owner, 0 or 1 */
-    uint8_t state;              /* FS_* */
+    FlagState state;
     uint8_t holder;             /* FS_CARRIED: carrying player; FS_PLACED: goal's team */
     int16_t home_x, home_y;
 } Flag;
@@ -189,26 +189,27 @@ typedef struct {
     uint32_t rng;                   /* xorshift32 sim PRNG, fixed seed per game */
     int16_t fruit_spot_x[MAX_FRUIT_SPOTS], fruit_spot_y[MAX_FRUIT_SPOTS];  /* cell top-left px */
     uint8_t fruit_spot_count;
-    uint8_t fruit_active, fruit_spot;
+    bool fruit_active;
+    uint8_t fruit_spot;
     uint16_t fruit_timer;           /* frames until a fruit appears, or until it goes */
     uint8_t water_len;              /* segments in the stream; 0 = no water */
     int16_t water_cx[WATER_LEN], water_cy[WATER_LEN];   /* cells, [0] = front */
     int8_t water_dir;
-    uint8_t water_draining;
-    uint8_t water_air;              /* the front left a floor: edge overhang decided */
+    bool water_draining;
+    bool water_air;                 /* the front left a floor: edge overhang decided */
     uint8_t water_extend;           /* cells left to run on past the edge */
     uint8_t water_step_timer;
     uint16_t water_steps;
     uint8_t water_owner, water_grace;   /* water_owner: player index */
-    uint8_t caught[MAX_PLAYERS];    /* carried by the water */
+    bool caught[MAX_PLAYERS];       /* carried by the water */
     uint8_t abilities;
     uint16_t prev_buttons[MAX_PLAYERS];
     uint32_t frame;
     uint32_t anim;                  /* frames not paused: clock for scenery and object
                                      * animation, which stops while paused (render
                                      * only, not hashed) */
-    uint8_t title;                  /* 0 (play), TITLE_SCREEN or TITLE_SETUP: the sim waits */
-    uint8_t paused;                 /* 0, PAUSE_MENU or PAUSE_CONTROLS */
+    TitleScreen title;              /* not TITLE_NONE: the sim waits */
+    PauseScreen paused;
     uint8_t menu_sel;               /* pause menu cursor, MENU_* */
     uint8_t title_sel;              /* setup screen row, SETUP_* */
     uint8_t stage, stage_count;     /* level picked (index in the platform's level list), of how many;
@@ -227,7 +228,7 @@ typedef struct {
 } Game;
 
 /* New round in a level (kept by pointer contents; its data must outlive
- * the game). tuning may be NULL for the defaults in player_tuning.h. */
+ * the game). tuning may be nullptr for the defaults in player_tuning.h. */
 void game_init(Game *g, const Level *lv, const PlayerTuning *tuning, uint8_t abilities);
 
 /* Show the title screen; Start or Jump goes on to the setup screen. */
@@ -250,7 +251,7 @@ void game_tick(Game *g, const InputState in[MAX_PLAYERS]);
 static inline int game_team(int i) { return i % TEAM_COUNT; }
 
 /* Is player i a CPU player (the platform passes core/bot.h's input)? */
-static inline int game_is_cpu(const Game *g, int i)
+static inline bool game_is_cpu(const Game *g, int i)
 {
     return i < g->player_count && i >= g->player_count - g->cpus;
 }
@@ -270,7 +271,7 @@ void game_platform_ahead(const Game *g, int i, int frames, int *x, int *y);
 /* Hash of all simulation state, for replay tests. */
 uint32_t game_hash(const Game *g);
 
-/* Attack hitbox of a player, for renderers (0 if none). */
-int game_attack_box(const Game *g, const Player *p, int *x, int *y, int *w, int *h);
+/* Attack hitbox of a player, for renderers (false if none). */
+bool game_attack_box(const Game *g, const Player *p, int *x, int *y, int *w, int *h);
 
 #endif

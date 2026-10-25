@@ -43,10 +43,10 @@ static xm_context_t *load_module(const char *dir, const char *name)
     char *data = read_all(path, &len);
     if (!data) {
         fprintf(stderr, "audio: %s\n", SDL_GetError());
-        return NULL;
+        return nullptr;
     }
     xm_prescan_data_t *p = SDL_malloc(XM_PRESCAN_DATA_SIZE);
-    xm_context_t *ctx = NULL;
+    xm_context_t *ctx = nullptr;
     if (xm_prescan_module(data, len, p)) {
         ctx = xm_create_context(malloc(xm_size_for_context(p)), p, data, len);
         xm_set_sample_rate(ctx, MUSIC_RATE);
@@ -67,14 +67,14 @@ static void load(Sound *s, const char *dir, const char *name, float gain)
         fprintf(stderr, "audio: %s\n", SDL_GetError());
         return;
     }
-    s->stream = SDL_CreateAudioStream(&spec, NULL);
+    s->stream = SDL_CreateAudioStream(&spec, nullptr);
     SDL_SetAudioStreamGain(s->stream, gain);
     SDL_BindAudioStream(dev, s->stream);
 }
 
 int sound_open(const char *assets_dir)
 {
-    dev = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
+    dev = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, nullptr);
     if (!dev) {
         fprintf(stderr, "audio: %s\n", SDL_GetError());
         return 1;
@@ -84,7 +84,7 @@ int sound_open(const char *assets_dir)
     for (int i = 1; i <= MUSIC_COUNT; i++)
         music[i] = load_module(assets_dir, audio_music_names[i]);
     SDL_AudioSpec spec = {SDL_AUDIO_F32, 2, MUSIC_RATE};
-    music_stream = SDL_CreateAudioStream(&spec, NULL);
+    music_stream = SDL_CreateAudioStream(&spec, nullptr);
     SDL_SetAudioStreamGain(music_stream, 0.45f);
     SDL_BindAudioStream(dev, music_stream);
     return 0;

@@ -98,7 +98,7 @@ typedef struct {
  * CELL_ONEWAY); an inactive one is skipped. */
 typedef struct {
     int16_t x, y, w, h;
-    uint8_t active, oneway;
+    bool active, oneway;
 } Solid;
 
 /* Moving platforms, plus the other players (core/game.c). */
@@ -117,12 +117,12 @@ typedef struct Level {
     const uint8_t *cells;
     const uint8_t *layers;      /* first layer header */
     const uint8_t *entities;    /* first entity record */
-    const char *name;           /* shown on the title screen; set by the platform, or NULL */
+    const char *name;           /* shown on the title screen; set by the platform, or nullptr */
 } Level;
 
 /* Returns 0 on success, nonzero if the data is malformed. Level keeps
  * pointers into data, which must outlive it. */
-int level_load(Level *lv, const uint8_t *data, uint32_t size);
+[[nodiscard]] int level_load(Level *lv, const uint8_t *data, uint32_t size);
 
 /* Collision value of a cell. Outside the level, sides and top are solid and
  * below the bottom is empty (falling out = pit). */
@@ -137,14 +137,14 @@ uint16_t level_tile(const Level *lv, int layer, int cx, int cy);
 
 /* Box queries, sim px, box = [x, x+w) x [y, y+h). level_box_solid also
  * tests the active solid boxes that are not one-way. */
-int level_box_solid(const Level *lv, int x, int y, int w, int h);
-int level_box_has(const Level *lv, int x, int y, int w, int h, uint8_t cell);
+bool level_box_solid(const Level *lv, int x, int y, int w, int h);
+bool level_box_has(const Level *lv, int x, int y, int w, int h, uint8_t cell);
 
 /* True if a cell is a platform: one-way, or the top cell of a ladder. */
-int level_cell_platform(const Level *lv, int cx, int cy);
+bool level_cell_platform(const Level *lv, int cx, int cy);
 
 /* Hazard hit test against the visible part of each hazard cell: spikes
  * point away from an adjacent solid, and only that half of the cell hurts. */
-int level_box_hazard(const Level *lv, int x, int y, int w, int h);
+bool level_box_hazard(const Level *lv, int x, int y, int w, int h);
 
 #endif

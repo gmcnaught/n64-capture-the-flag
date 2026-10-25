@@ -41,8 +41,14 @@
  * from a slowly refilling budget of BOT_SWINGS, gives up a hunt after
  * BOT_HUNT_FRAMES, never dashes, and botches some jumps on purpose: a jump
  * whose landing is in its goal fails BOT_GOAL_MISS percent of the time,
- * any other jump BOT_JUMP_MISS percent. Its own PRNG (Bot.rng) makes those
- * choices.
+ * any other jump BOT_JUMP_MISS percent. A player standing or coming the
+ * other way on the ground ahead (up to BOT_LOOK px, before the move
+ * leaves the ground) is seen; after BOT_LOOK_REACT frames and a random
+ * few more the bot goes round it (that way costs more, it plans again),
+ * jumps over it or waits for it. A bot walking into a player anyway (not
+ * moving for a random 10 to 30 frames, 10 to 25 in a move) jumps on
+ * that way, backs off or waits and goes another way. Its own PRNG
+ * (Bot.rng) makes those choices.
  */
 #ifndef BOT_H
 #define BOT_H
@@ -56,14 +62,14 @@
 #define NAV_GRAPHS 2                /* on foot, carrying */
 #define BOT_PATH_MAX 48
 
-enum { NAV_WALK, NAV_JUMP, NAV_FALL, NAV_DROP, NAV_RIDE };
+typedef enum : uint8_t { NAV_WALK, NAV_JUMP, NAV_FALL, NAV_DROP, NAV_RIDE } NavKind;
 
 /* A move from rest at a node; the buttons of each frame come from
  * bot_move_buttons. */
 typedef struct {
     uint16_t to;                    /* node it lands on */
     uint16_t cost;                  /* frames */
-    uint8_t kind;                   /* NAV_* */
+    NavKind kind;
     int8_t dir;                     /* held from the start (-1, 0, 1) */
     int8_t air;                     /* held after the run-up */
     uint8_t run;                    /* frames of dir before the jump (fall: before air;
@@ -91,19 +97,20 @@ typedef struct {
     /* Moving platforms (build only): box at each end of the path. */
     uint8_t plat_count;
     int16_t plat_x[MAX_PLATFORMS][2], plat_y[MAX_PLATFORMS][2], plat_w[MAX_PLATFORMS], plat_h[MAX_PLATFORMS];
-    uint8_t plat_oneway[MAX_PLATFORMS];
+    bool plat_oneway[MAX_PLATFORMS];
     int32_t plat_speed[MAX_PLATFORMS];
     NavGraph graphs[NAV_GRAPHS];
-    uint8_t graph, done;            /* build progress: graph being built, all done */
+    uint8_t graph;                  /* build progress: graph being built */
+    bool done;                      /* build progress: all done */
     uint16_t next;                  /* build progress: next node of that graph */
 } BotNav;
 
 /* Start building the graph of a level (copied, without its moving solids;
  * its data must outlive the graph), with the game's tuning. */
 void bot_nav_begin(BotNav *nav, const Level *lv, const PlayerTuning *t);
-/* Build the moves of up to n more nodes; returns 1 once the graph is done. */
-int bot_nav_step(BotNav *nav, int n);
-static inline int bot_nav_ready(const BotNav *nav) { return nav->done; }
+/* Build the moves of up to n more nodes; returns true once the graph is done. */
+bool bot_nav_step(BotNav *nav, int n);
+static inline bool bot_nav_ready(const BotNav *nav) { return nav->done; }
 /* Buttons of move e at frame f from its start (0xffff: past its script). */
 uint16_t bot_move_buttons(const NavEdge *e, int f);
 
@@ -123,10 +130,10 @@ uint32_t bot_nav_size(const BotNav *nav);
 void bot_nav_write(const BotNav *nav, uint8_t *out);     /* bot_nav_size bytes */
 /* Load a graph file for level lv and tuning t (the file must match both).
  * Returns 0 on success; nav is then ready. */
-int bot_nav_read(BotNav *nav, const Level *lv, const PlayerTuning *t, const uint8_t *data,
-                 uint32_t size);
+[[nodiscard]] int bot_nav_read(BotNav *nav, const Level *lv, const PlayerTuning *t,
+                               const uint8_t *data, uint32_t size);
 
-enum { BOT_CAPTURE, BOT_RECOVER, BOT_HUNT, BOT_DEFEND, BOT_AIMS };
+typedef enum : uint8_t { BOT_CAPTURE, BOT_RECOVER, BOT_HUNT, BOT_DEFEND, BOT_AIMS } BotAim;
 
 #define BOT_THINK 20                /* frames between picks of the aim */
 #define BOT_REACT 14                /* frames an enemy is in reach before a swing */
@@ -137,11 +144,13 @@ enum { BOT_CAPTURE, BOT_RECOVER, BOT_HUNT, BOT_DEFEND, BOT_AIMS };
 #define BOT_GOAL_MISS 35            /* percent of jumps into the goal botched */
 #define BOT_JUMP_MISS 5             /* percent of other jumps botched */
 #define BOT_FIGHT 30                /* percent of chances to kick a non-carrier taken */
+#define BOT_LOOK 64                 /* px ahead a player in the way is seen */
+#define BOT_LOOK_REACT 4            /* frames it is seen before going round: this + 0..16 */
 
 typedef struct {
     uint32_t rng;
     uint8_t player;
-    uint8_t aim;                    /* BOT_* */
+    BotAim aim;
     int8_t aim_target;              /* flag or player index */
     uint8_t think;                  /* frames to the next pick */
     /* Path: nodes and the edges between them (path_edge[i]: path_node[i] ->
@@ -152,13 +161,14 @@ typedef struct {
     int16_t goal_x, goal_y, goal_w, goal_h;     /* target box of the path */
     int16_t plan_x, plan_y;         /* goal box corner when planned */
     int8_t goal_touch;              /* the box is this team's goal zone (moves through it count), or -1 */
-    uint8_t replan;
-    uint8_t was_carrying;
+    bool replan;
+    bool was_carrying;
     /* Move being played: edge (in path_graph), frame, left the ground. */
     int16_t move;
     NavEdge move_edge;              /* the move as played (botched: changed) */
-    uint8_t move_f, move_air, move_landed;
-    uint8_t botched;                /* this move was botched on purpose */
+    uint8_t move_f;
+    bool move_air, move_landed;
+    bool botched;                   /* this move was botched on purpose */
     uint8_t settle;                 /* frames standing still before a move */
     uint16_t wait;                  /* frames waiting for a moving platform */
     /* Combat. */
@@ -166,10 +176,14 @@ typedef struct {
     uint16_t swing_timer;
     uint8_t react, react_need;      /* frames an enemy has been in reach; needed to swing */
     uint16_t hunt_timer, hunt_rest;
-    uint8_t fight_roll;             /* this enemy contact: kick a non-carrier */
+    bool fight_roll;                /* this enemy contact: kick a non-carrier */
     int8_t last_contact;
-    /* Stuck: frames without moving while trying to. */
-    uint16_t stuck;
+    /* A player in the way: frames seen; needed before going round. */
+    uint8_t look, look_need;
+    /* Stuck: frames without moving while trying to (in a move: blocked);
+     * needed before getting out. */
+    uint16_t stuck, stuck_dir;      /* stuck_dir: the button it walked with */
+    uint8_t stuck_need, blocked, block_need;
     int16_t last_x, last_y;
     uint8_t wiggle;                 /* frames of a random escape move */
     uint16_t wiggle_buttons;

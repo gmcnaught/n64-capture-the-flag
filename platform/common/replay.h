@@ -34,7 +34,7 @@ typedef struct {
     PlayerTuning tuning;
     ReplayFrame *frames;
     size_t count, cap;
-    int has_hash, has_kos;
+    bool has_hash, has_kos;
     uint32_t hash;
     int kos[MAX_PLAYERS];
     char comments[1024];            /* leading # lines, kept on save */
@@ -43,8 +43,8 @@ typedef struct {
 void replay_init(Replay *r, const char *level, uint8_t abilities, const PlayerTuning *t);
 void replay_push(Replay *r, const InputState in[MAX_PLAYERS]);
 void replay_free(Replay *r);
-int replay_load(Replay *r, const char *path);       /* 0 on success */
-int replay_save(const Replay *r, const char *path); /* 0 on success */
+[[nodiscard]] int replay_load(Replay *r, const char *path);       /* 0 on success */
+[[nodiscard]] int replay_save(const Replay *r, const char *path); /* 0 on success */
 
 /* Start a game for a replay in its level (loaded by the caller). */
 void replay_start(const Replay *r, Game *g, const Level *lv);

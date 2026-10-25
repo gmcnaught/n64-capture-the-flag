@@ -9,7 +9,7 @@ static int iabs(int v) { return v < 0 ? -v : v; }
 
 /* ---- navigation graph -------------------------------------------------------- */
 
-static int body_fits(const Level *lv, int x, int y)
+static bool body_fits(const Level *lv, int x, int y)
 {
     return !level_box_solid(lv, x, y, PLAYER_HIT_W, PLAYER_HIT_H) &&
            !level_box_hazard(lv, x - 2, y, PLAYER_HIT_W + 4, PLAYER_HIT_H + 1);
@@ -94,13 +94,13 @@ static int node_near(const BotNav *nav, int x, int y, int snap)
 }
 
 /* Can a body walk along row y from x0 to x1 (standing all the way)? */
-static int floor_between(const Level *lv, int x0, int x1, int y)
+static bool floor_between(const Level *lv, int x0, int x1, int y)
 {
     for (int x = x0; x != x1; x += x1 > x0 ? 1 : -1)
         if (!body_fits(lv, x, y) || (!level_box_solid(lv, x, y + 1, PLAYER_HIT_W, PLAYER_HIT_H) &&
                                     !level_box_has(lv, x, y + PLAYER_HIT_H, PLAYER_HIT_W, 1, CELL_ONEWAY)))
-            return 0;
-    return 1;
+            return false;
+    return true;
 }
 
 uint16_t bot_move_buttons(const NavEdge *e, int f)
@@ -137,8 +137,8 @@ uint16_t bot_move_buttons(const NavEdge *e, int f)
  * (e->cost) and the goal zones touched on the way. With onto >= 0 (a
  * platform node), only a landing on that platform counts. A move that
  * touches a goal counts even if it lands off the graph or back where it
- * started (e->to is then from). 0 if it fails. */
-static int sim_move(const BotNav *nav, const Level *lv, const PlayerTuning *t, int from, int onto,
+ * started (e->to is then from). false if it fails. */
+static bool sim_move(const BotNav *nav, const Level *lv, const PlayerTuning *t, int from, int onto,
                     NavEdge *e)
 {
     Player p;
@@ -147,8 +147,9 @@ static int sim_move(const BotNav *nav, const Level *lv, const PlayerTuning *t, i
     uint16_t prev = 0;
     player_tick(&p, lv, t, &in, 0);
     if (!p.grounded)
-        return 0;
-    int air = 0, landed = 0, inside = 0;    /* inside: goal zones it starts in */
+        return false;
+    bool air = false, landed = false;
+    int inside = 0;                     /* goal zones it starts in */
     e->touch = e->touch_cost = 0;
     for (int k = 0; k < TEAM_COUNT; k++)
         if (p.body.x < nav->goal_x[k] + nav->goal_w[k] && p.body.x + p.body.w > nav->goal_x[k] &&
@@ -162,7 +163,7 @@ static int sim_move(const BotNav *nav, const Level *lv, const PlayerTuning *t, i
         const Body *b = &p.body;
         if (b->y >= lv->px_h || p.state == PS_CLIMB ||
             level_box_hazard(lv, b->x, b->y, b->w, b->h))
-            return 0;
+            return false;
         for (int k = 0; k < TEAM_COUNT && onto < 0; k++)
             if (!e->touch && !(inside & (1 << k)) && b->x < nav->goal_x[k] + nav->goal_w[k] && b->x + b->w > nav->goal_x[k] &&
                 b->y < nav->goal_y[k] + nav->goal_h[k] && b->y + b->h > nav->goal_y[k]) {
@@ -170,21 +171,21 @@ static int sim_move(const BotNav *nav, const Level *lv, const PlayerTuning *t, i
                 e->touch_cost = (uint8_t)(f + 1);
             }
         if (!p.grounded) {
-            air = 1;
+            air = true;
             continue;
         }
         if (!air)
             continue;
-        landed = 1;                     /* then no input until at rest (ice slides on) */
+        landed = true;                  /* then no input until at rest (ice slides on) */
         if (b->vx != 0)
             continue;
         int n = -1;
         const Solid *s = &lv->solids[0];
-        int on_plat = lv->solid_count && b->y + b->h == s->y && b->x < s->x + s->w &&
-                      b->x + b->w > s->x;
+        bool on_plat = lv->solid_count && b->y + b->h == s->y && b->x < s->x + s->w &&
+                       b->x + b->w > s->x;
         if (onto >= 0) {
             if (!on_plat)
-                return 0;
+                return false;
             n = onto;
         } else if (on_plat) {
             n = -1;                     /* back on the platform it left */
@@ -194,12 +195,12 @@ static int sim_move(const BotNav *nav, const Level *lv, const PlayerTuning *t, i
                 n = -1;
         }
         if ((n < 0 || n == from) && !e->touch)
-            return 0;
+            return false;
         e->to = (uint16_t)(n < 0 ? from : n);
         e->cost = (uint16_t)(f + 1 + (n < 0 || onto >= 0 ? 0 : FX(iabs(nav->node_x[n] - b->x)) / t->run_speed));
-        return 1;
+        return true;
     }
-    return 0;
+    return false;
 }
 
 /* Keep the quickest move to each node, and through each goal: edges of the
@@ -336,7 +337,7 @@ void bot_nav_begin(BotNav *nav, const Level *lv, const PlayerTuning *t)
     nav->tuning = *t;
     nav->graph = 0;
     nav->next = 0;
-    nav->done = 0;
+    nav->done = false;
     nav->plat_count = 0;
     for (int k = 0; k < TEAM_COUNT; k++)
         nav->goal_x[k] = nav->goal_y[k] = nav->goal_w[k] = nav->goal_h[k] = 0;
@@ -357,7 +358,7 @@ void bot_nav_begin(BotNav *nav, const Level *lv, const PlayerTuning *t)
             nav->plat_y[p][1] = e.y2;
             nav->plat_w[p] = (int16_t)e.w;
             nav->plat_h[p] = (int16_t)e.h;
-            nav->plat_oneway[p] = (uint8_t)(e.flag & 1);
+            nav->plat_oneway[p] = (e.flag & 1) != 0;
             nav->plat_speed[p] = (int32_t)e.param << 8;
         }
     }
@@ -368,13 +369,13 @@ void bot_nav_begin(BotNav *nav, const Level *lv, const PlayerTuning *t)
     }
 }
 
-int bot_nav_step(BotNav *nav, int n)
+bool bot_nav_step(BotNav *nav, int n)
 {
     while (!nav->done && n-- > 0) {
         if (nav->next >= nav->node_count) {
             nav->next = 0;
             if (++nav->graph == NAV_GRAPHS) {
-                nav->done = 1;
+                nav->done = true;
                 break;
             }
             continue;
@@ -508,7 +509,7 @@ int bot_nav_read(BotNav *nav, const Level *lv, const PlayerTuning *t, const uint
     }
     nav->graph = NAV_GRAPHS;
     nav->next = 0;
-    nav->done = 1;
+    nav->done = true;
     return 0;
 }
 
@@ -528,7 +529,7 @@ static int box_gap_x(int x, int w, int bx, int bw)
     return x + w <= bx ? bx - (x + w) : bx + bw <= x ? x - (bx + bw) : 0;
 }
 
-static int node_in_box(const BotNav *nav, int n, int bx, int by, int bw, int bh)
+static bool node_in_box(const BotNav *nav, int n, int bx, int by, int bw, int bh)
 {
     int x = nav->node_x[n], y = nav->node_y[n];
     return x < bx + bw && x + PLAYER_HIT_W > bx && y < by + bh && y + PLAYER_HIT_H > by;
@@ -602,7 +603,7 @@ static void plan(Bot *b, const BotNav *nav, int start, int graph)
     /* No node in the box (a flag in the air, a player jumping): widen it
      * sideways and down. */
     for (int k = 0; k < 4; k++) {
-        int any = 0;
+        bool any = false;
         for (int i = 0; i < nav->node_count && !any; i++)
             any = node_in_box(nav, i, bx, by, bw, bh);
         if (any)
@@ -676,7 +677,7 @@ static void plan(Bot *b, const BotNav *nav, int start, int graph)
     b->path_len = (uint8_t)keep;
     b->path_pos = 0;
     b->path_graph = (uint8_t)graph;
-    b->replan = 0;
+    b->replan = false;
     b->plan_x = (int16_t)b->goal_x;
     b->plan_y = (int16_t)b->goal_y;
 }
@@ -692,10 +693,10 @@ void bot_init(Bot *b, int player, uint32_t seed)
     b->aim_target = -1;
     b->last_contact = -1;
     b->swings = BOT_SWINGS;
-    b->replan = 1;
+    b->replan = true;
 }
 
-static int alive(const Game *g, int t)
+static bool alive(const Game *g, int t)
 {
     const Player *p = &g->players[t];
     return !p->dead && p->state != PS_HURT && !g->caught[t];
@@ -719,7 +720,7 @@ static void set_goal(Bot *b, int x, int y, int w, int h)
 }
 
 /* Is a teammate of player t (alive, not carrying) nearer to (x, y)? */
-static int teammate_nearer(const Game *g, int t, int x, int y)
+static bool teammate_nearer(const Game *g, int t, int x, int y)
 {
     const Body *pb = &g->players[t].body;
     int d = dist(cx(pb), cy(pb), x, y);
@@ -727,9 +728,9 @@ static int teammate_nearer(const Game *g, int t, int x, int y)
         const Body *ob = &g->players[o].body;
         if (o != t && game_team(o) == game_team(t) && alive(g, o) && g->carrying[o] < 0 &&
             dist(cx(ob), cy(ob), x, y) < d)
-            return 1;
+            return true;
     }
-    return 0;
+    return false;
 }
 
 static void pick_aim(Bot *b, const Game *g)
@@ -799,7 +800,7 @@ static void pick_aim(Bot *b, const Game *g)
         }
     }
     if (aim != b->aim || target != b->aim_target)
-        b->replan = 1;
+        b->replan = true;
     if (aim != BOT_HUNT)
         b->hunt_timer = 0;
     b->aim = (uint8_t)aim;
@@ -829,7 +830,7 @@ static void aim_goal(Bot *b, const Game *g)
                  g->home_y1[team] - g->home_y0[team]);
     }
     if (iabs(b->goal_x - b->plan_x) > TILE_W || iabs(b->goal_y - b->plan_y) > TILE_H)
-        b->replan = 1;
+        b->replan = true;
 }
 
 /* ---- moving ------------------------------------------------------------------------ */
@@ -845,7 +846,7 @@ static uint16_t walk_to(const Game *g, const Player *p, int x)
         return 0;
     int d = dx > 0 ? 1 : -1;
     int cyf = (pb->y + pb->h) >> TILE_SHIFT_Y;
-    int ice = level_surface(&g->lv, cx(pb) >> TILE_SHIFT_X, cyf) == SURFACE_ICE;
+    bool ice = level_surface(&g->lv, cx(pb) >> TILE_SHIFT_X, cyf) == SURFACE_ICE;
     fx decel = ice ? g->tuning.ice_decel : g->tuning.run_decel;
     if ((pb->vx > 0) == (d > 0) && pb->vx != 0) {
         int stop = (int)(((int64_t)pb->vx * pb->vx / (2 * decel)) >> 16);
@@ -860,6 +861,8 @@ static void reset_move(Bot *b)
     b->move = -1;
     b->settle = 0;
     b->wiggle = 0;
+    b->look = 0;
+    b->blocked = 0;
 }
 
 /* Botch a jump on purpose: no double jump, or a short hop. */
@@ -873,6 +876,133 @@ static void botch(Bot *b, NavEdge *e)
     } else {
         e->air = 0;
     }
+}
+
+/* ---- players in the way -------------------------------------------------------- */
+
+/* Body x at which a walk from x in direction d along row y (body top) runs
+ * out of floor (or meets a wall). */
+static int ledge_x(const Level *lv, int x, int y, int d)
+{
+    int cy = (y + PLAYER_HIT_H) >> TILE_SHIFT_Y;
+    int c = (x + PLAYER_HIT_W / 2) >> TILE_SHIFT_X;
+    for (int nc = c + d; nc >= 0 && nc < lv->cell_w; nc += d) {
+        if (level_cell(lv, nc, cy - 1) == CELL_SOLID ||
+            (level_cell(lv, nc, cy) != CELL_SOLID && !level_cell_platform(lv, nc, cy)))
+            break;
+        c = nc;
+    }
+    return d > 0 ? (c + 1) * TILE_W : c * TILE_W - PLAYER_HIT_W;
+}
+
+/* Body x at which move e, at frame f with the body at x on row y, leaves
+ * the ground (x: no run on the ground first). */
+static int takeoff_x(const BotNav *nav, const NavEdge *e, int f, int x, int y)
+{
+    if (e->kind == NAV_FALL)
+        return ledge_x(&nav->lv, x, y, e->dir);
+    if (e->kind == NAV_JUMP && e->dir && f < e->run)
+        return x + e->dir * ((e->run - f) * nav->tuning.run_speed >> 16);
+    return x;
+}
+
+/* A player in the way of bot b walking from body x x0 to x1 on its row:
+ * ahead within BOT_LOOK px, standing or coming the other way; unless b
+ * carries a flag, not an enemy carrier or the enemy it is after (it
+ * fights those). -1 if none. */
+static int in_way(const Bot *b, const Game *g, int x0, int x1)
+{
+    int t = b->player;
+    const Body *pb = &g->players[t].body;
+    int d = x1 > x0 ? 1 : x1 < x0 ? -1 : 0;
+    if (!d)
+        return -1;
+    if (iabs(x1 - x0) > BOT_LOOK)
+        x1 = x0 + d * BOT_LOOK;
+    int lo = d > 0 ? x0 : x1, hi = (d > 0 ? x1 : x0) + PLAYER_HIT_W;
+    for (int o = 0; o < g->player_count; o++) {
+        const Body *ob = &g->players[o].body;
+        int ov = ob->vx > 0 ? 1 : ob->vx < 0 ? -1 : 0;
+        if (o == t || !alive(g, o) || (ob->x - x0) * d <= 0 || ob->x >= hi ||
+            ob->x + ob->w <= lo || ob->y >= pb->y + pb->h || ob->y + ob->h <= pb->y || ov == d)
+            continue;
+        if (game_team(o) != game_team(t) && g->carrying[t] < 0 &&
+            (g->carrying[o] >= 0 ||
+             ((b->aim == BOT_HUNT || b->aim == BOT_DEFEND) && b->aim_target == o)))
+            continue;
+        return o;
+    }
+    return -1;
+}
+
+/* Walking into a player (direction button d): jump on that way, back off
+ * (walking, as far as the floor goes; else jumping) or wait and go another
+ * way (edge, if any, costs more). Plans again. */
+static void unstick(Bot *b, const BotNav *nav, const Game *g, int edge, uint16_t d)
+{
+    const Body *pb = &g->players[b->player].body;
+    uint16_t back = d ^ (BTN_LEFT | BTN_RIGHT);
+    unsigned r = rnd(b) % 4, frames = 0;
+    if (r == 3 && edge < 0)
+        r = 2;
+    if (r == 2) {                       /* well short of the ledge (it slides on) */
+        frames = (unsigned)iabs(ledge_x(&nav->lv, pb->x, pb->y, back & BTN_LEFT ? -1 : 1) - pb->x) / 4;
+        if (frames > 20 + rnd(b) % 41)
+            frames = 20 + rnd(b) % 41;
+    }
+    reset_move(b);
+    b->stuck = 0;
+    b->replan = true;
+    if (r < 2 || (r == 2 && frames < 8)) {
+        b->wiggle = 30;
+        b->wiggle_buttons = (uint16_t)((r < 2 ? d : back) | BTN_JUMP);
+    } else if (r == 2) {
+        b->wiggle = (uint8_t)frames;
+        b->wiggle_buttons = back;
+    } else {
+        if (edge >= 0)
+            penalize(b, b->path_graph, edge);
+        b->wiggle = (uint8_t)(5 + rnd(b) % 16);
+        b->wiggle_buttons = 0;
+    }
+}
+
+/* A player in the way of the walk from x0 to x1 (edge, if any): once seen
+ * for the reaction time, go round it (edge costs more, plan again), jump
+ * over it (when near) or wait for it (when not touching). true if the bot
+ * does so now. */
+static bool dodge(Bot *b, const Game *g, int edge, int x0, int x1)
+{
+    int o = in_way(b, g, x0, x1);
+    if (o < 0) {
+        b->look = 0;
+        return false;
+    }
+    if (b->look++ == 0)
+        b->look_need = (uint8_t)(BOT_LOOK_REACT + rnd(b) % 17);
+    if (b->look < b->look_need)
+        return false;
+    int d = x1 > x0 ? 1 : -1, gap = iabs(g->players[o].body.x - x0) - PLAYER_HIT_W;
+    unsigned r = rnd(b) % 4;
+    if (r < 2 && edge < 0)
+        r = 2;
+    if (r == 3 && gap <= 2)             /* touching: waiting does nothing */
+        r = 2;
+    if (r == 2 && gap > 2 * TILE_W)
+        r = 3;
+    reset_move(b);
+    if (r < 2) {
+        penalize(b, b->path_graph, edge);
+        b->replan = true;
+    } else if (r == 2) {
+        b->wiggle = 30;
+        b->wiggle_buttons = (uint16_t)(dir_button(d) | BTN_JUMP);
+        b->replan = true;
+    } else {
+        b->wiggle = (uint8_t)(10 + rnd(b) % 31);
+        b->wiggle_buttons = 0;
+    }
+    return true;
 }
 
 /* The node a standing body is at: a static node, or the node of the moving
@@ -894,7 +1024,7 @@ static int node_of(const BotNav *nav, const Game *g, const Body *pb, int *riding
 }
 
 /* Will platform i be standing at end k in `frames` frames? */
-static int plat_at(const Game *g, int i, int k, int frames)
+static bool plat_at(const Game *g, int i, int k, int frames)
 {
     const Platform *pl = &g->platforms[i];
     int x, y;
@@ -905,15 +1035,15 @@ static int plat_at(const Game *g, int i, int k, int frames)
 /* Can move e from node `from` start now: a platform it leaves still waits
  * at its end for the run-up and the takeoff, a platform it lands on will
  * be at that end on landing? */
-static int move_timed(const BotNav *nav, const Game *g, int from, const NavEdge *e)
+static bool move_timed(const BotNav *nav, const Game *g, int from, const NavEdge *e)
 {
     int p = nav->node_plat[from], q = nav->node_plat[e->to];
     if (p >= 0 && !plat_at(g, p, nav->node_end[from], e->run + 6))
-        return 0;
+        return false;
     if (q >= 0 && e->to != from && (!plat_at(g, q, nav->node_end[e->to], e->cost + 1) ||
                                     !plat_at(g, q, nav->node_end[e->to], e->cost + 4)))
-        return 0;
-    return 1;
+        return false;
+    return true;
 }
 
 static uint16_t navigate(Bot *b, const BotNav *nav, const Game *g)
@@ -926,30 +1056,54 @@ static uint16_t navigate(Bot *b, const BotNav *nav, const Game *g)
         if (p->grounded && b->move_air && p->body.vx == 0) {     /* landed, at rest */
             const NavEdge *e = &nav->graphs[b->path_graph].edges[b->move];
             int riding, n = node_of(nav, g, pb, &riding);
-            int scored = e->touch && graph == 0 && b->path_graph == 1;
+            bool scored = e->touch && graph == 0 && b->path_graph == 1;
             if (e->touch && b->path_graph == 1) {
                 if (!scored && !b->botched)
                     penalize(b, b->path_graph, b->move);
-                b->replan = 1;
+                b->replan = true;
             } else if (n != e->to) {
                 if (!b->botched)
                     penalize(b, b->path_graph, b->move);
-                b->replan = 1;
+                b->replan = true;
             }
             b->move = -1;
         } else {
             if (!p->grounded)
-                b->move_air = 1;
+                b->move_air = true;
             else if (b->move_air)
-                b->move_landed = 1;
+                b->move_landed = true;
             uint16_t h = b->move_landed ? 0 : bot_move_buttons(&b->move_edge, b->move_f);
+            uint16_t hd = h & (BTN_LEFT | BTN_RIGHT);
+            if (p->grounded && !b->move_air && h != 0xffff && !hd &&
+                !(h & (BTN_JUMP | BTN_DOWN)) && pb->vx == 0 && b->move_f) {
+                /* Its run done, at rest, not off: started off its node, it
+                 * will not leave the ground. */
+                penalize(b, b->path_graph, b->move);
+                reset_move(b);
+                b->replan = true;
+                return 0;
+            }
+            if (p->grounded && !b->move_air && h != 0xffff && hd) {
+                /* Still on the ground: a player in the way ahead, or walked into. */
+                int d = hd == BTN_LEFT ? -1 : 1;
+                int x1 = d == b->move_edge.dir
+                             ? takeoff_x(nav, &b->move_edge, b->move_f, pb->x, pb->y) : pb->x;
+                if (dodge(b, g, b->move, pb->x, x1))
+                    return 0;
+                if (pb->x != b->last_x || b->move_f < 2)
+                    b->blocked = 0;
+                else if (++b->blocked >= b->block_need) {
+                    unstick(b, nav, g, b->move, hd);
+                    return 0;
+                }
+            }
             b->move_f++;
             if (b->move_landed && b->move_f < MOVE_MAX_FRAMES)
                 return 0;
             if (h != 0xffff && !p->knock)
                 return h;
             b->move = -1;
-            b->replan = 1;
+            b->replan = true;
             return 0;
         }
     }
@@ -977,7 +1131,7 @@ static uint16_t navigate(Bot *b, const BotNav *nav, const Game *g)
         return dir_button(b->goal_x + b->goal_w / 2 < pb->x + pb->w / 2 ? -1 : 1);
     }
     if (graph != b->path_graph || b->path_len == 0)
-        b->replan = 1;
+        b->replan = true;
     int k = -1;
     for (int i = b->path_pos; i < b->path_len && !b->replan; i++)
         if (b->path_node[i] == cur) {
@@ -1005,8 +1159,20 @@ static uint16_t navigate(Bot *b, const BotNav *nav, const Game *g)
     const NavEdge *next = &gr->edges[b->path_edge[j]];
     if (next->kind == NAV_RIDE && j == k)
         return 0;                       /* wait for the platform to go */
-    /* On a platform, another player may hold its middle: start from near it. */
-    int slack = nav->node_plat[from] >= 0 && b->stuck > 6 ? 10 : 2;
+    if (riding < 0 && nav->node_plat[from] < 0) {
+        /* A player in the way of the walk to the takeoff and the move's run. */
+        int x0 = pb->x, x1 = nav->node_x[from];
+        if (j == k && iabs(x1 - x0) <= SNAP_X)
+            x1 = x0;                    /* near enough to start from here (below) */
+        int d = x1 != x0 ? (x1 > x0 ? 1 : -1) : next->dir;
+        if (d && next->dir == d)
+            x1 = takeoff_x(nav, next, 0, x1, pb->y);
+        if (dodge(b, g, b->path_edge[k], x0, x1))
+            return 0;
+    }
+    /* Another player may hold the node (or a platform's middle): start from
+     * near it. */
+    int slack = b->stuck > 6 ? (nav->node_plat[from] >= 0 ? 10 : SNAP_X) : 2;
     if (j > k || iabs(pb->x - nav->node_x[from]) > slack || iabs(pb->vx) > FX(1) / 2)
         return walk_to(g, p, nav->node_x[from]);
     /* At the takeoff node: wait a little (and for moving platforms to be
@@ -1016,7 +1182,7 @@ static uint16_t navigate(Bot *b, const BotNav *nav, const Game *g)
         if (++b->wait > 400) {          /* the platform never comes: try another way */
             b->wait = 0;
             penalize(b, b->path_graph, b->path_edge[j]);
-            b->replan = 1;
+            b->replan = true;
         }
         b->settle = 0;
         return 0;
@@ -1031,16 +1197,18 @@ static uint16_t navigate(Bot *b, const BotNav *nav, const Game *g)
     b->move = b->path_edge[j];
     b->move_edge = gr->edges[b->move];
     b->move_f = 0;
-    b->move_air = b->move_landed = 0;
-    b->botched = 0;
+    b->move_air = b->move_landed = false;
+    b->botched = false;
+    b->blocked = 0;
+    b->block_need = (uint8_t)(10 + rnd(b) % 16);
     if (b->move_edge.kind == NAV_JUMP) {
         int team = game_team(t), to = b->move_edge.to;
-        int into_goal = graph && ((b->move_edge.touch & (1u << team)) ||
-                                  node_in_box(nav, to, g->goal_x[team], g->goal_y[team],
-                                              g->goal_w[team], g->goal_h[team]));
+        bool into_goal = graph && ((b->move_edge.touch & (1u << team)) ||
+                                   node_in_box(nav, to, g->goal_x[team], g->goal_y[team],
+                                               g->goal_w[team], g->goal_h[team]));
         if ((int)(rnd(b) % 100) < (into_goal ? BOT_GOAL_MISS : BOT_JUMP_MISS)) {
             botch(b, &b->move_edge);
-            b->botched = 1;
+            b->botched = true;
         }
     }
     return 0;
@@ -1048,7 +1216,7 @@ static uint16_t navigate(Bot *b, const BotNav *nav, const Game *g)
 
 /* ---- fighting ---------------------------------------------------------------------- */
 
-static int box_hits(int ax, int ay, int aw, int ah, const Body *o)
+static bool box_hits(int ax, int ay, int aw, int ah, const Body *o)
 {
     return ax < o->x + o->w && ax + aw > o->x && ay < o->y + o->h && ay + ah > o->y;
 }
@@ -1093,10 +1261,10 @@ static uint16_t fight(Bot *b, const Game *g, uint16_t buttons)
         b->last_contact = (int8_t)victim;
         b->react = 0;
         b->react_need = (uint8_t)(BOT_REACT - 4 + rnd(b) % 9);
-        b->fight_roll = (uint8_t)((int)(rnd(b) % 100) < BOT_FIGHT ||
-                                  (b->aim == BOT_DEFEND && b->aim_target == victim));
+        b->fight_roll = (int)(rnd(b) % 100) < BOT_FIGHT ||
+                        (b->aim == BOT_DEFEND && b->aim_target == victim);
     }
-    int carrier = g->carrying[victim] >= 0;
+    bool carrier = g->carrying[victim] >= 0;
     if ((!carrier && !b->fight_roll) || ++b->react < b->react_need || !b->swings ||
         (b->held & BTN_ATTACK) || (b->move >= 0 && !carrier))
         return buttons;
@@ -1121,7 +1289,7 @@ InputState bot_input(Bot *b, const BotNav *nav, const Game *g)
     if (!nav->done || g->title || g->paused || g->winner || g->countdown > COUNTDOWN_GO ||
         t >= g->player_count) {
         reset_move(b);
-        b->replan = 1;
+        b->replan = true;
         b->held = 0;
         return in;
     }
@@ -1145,7 +1313,7 @@ InputState bot_input(Bot *b, const BotNav *nav, const Game *g)
     /* Sent home, respawned or carried off: start over. */
     if (iabs(pb->x - b->last_x) > 32 || iabs(pb->y - b->last_y) > 32) {
         reset_move(b);
-        b->replan = 1;
+        b->replan = true;
     }
     if (p->dead || p->state == PS_HURT || g->caught[t]) {
         reset_move(b);
@@ -1154,27 +1322,27 @@ InputState bot_input(Bot *b, const BotNav *nav, const Game *g)
         b->last_y = pb->y;
         return in;
     }
-    int carrying = g->carrying[t] >= 0;
+    bool carrying = g->carrying[t] >= 0;
     if (b->think == 0 || carrying != b->was_carrying) {
         b->think = BOT_THINK;
         pick_aim(b, g);
     }
     b->think--;
-    b->was_carrying = (uint8_t)carrying;
+    b->was_carrying = carrying;
     aim_goal(b, g);
     uint16_t buttons = navigate(b, nav, g);
     /* Stuck (a player in the way): trying to walk but not moving for a
-     * while: jump on that way, now and then the other way. */
-    if (b->move < 0 && !b->wiggle && p->grounded && (buttons & (BTN_LEFT | BTN_RIGHT)) &&
-        pb->x == b->last_x) {
-        if (++b->stuck > 30) {
-            uint16_t d = buttons & (BTN_LEFT | BTN_RIGHT);
-            if (rnd(b) % 4 == 0)
-                d ^= BTN_LEFT | BTN_RIGHT;
-            b->stuck = 0;
-            b->wiggle = 30;
-            b->wiggle_buttons = (uint16_t)(d | BTN_JUMP);
-            b->replan = 1;
+     * while (random; frames walk_to lets go to stop count too): get out
+     * (unstick). */
+    if (b->move < 0 && !b->wiggle && p->grounded &&
+        ((buttons & (BTN_LEFT | BTN_RIGHT)) || b->stuck) && pb->x == b->last_x) {
+        if (b->stuck == 0)
+            b->stuck_need = (uint8_t)(10 + rnd(b) % 21);
+        if (buttons & (BTN_LEFT | BTN_RIGHT))
+            b->stuck_dir = buttons & (BTN_LEFT | BTN_RIGHT);
+        if (++b->stuck > b->stuck_need) {
+            int e = b->path_pos + 1 < b->path_len ? b->path_edge[b->path_pos] : -1;
+            unstick(b, nav, g, e, b->stuck_dir);
             buttons = 0;                /* a release before the jump */
         }
     } else {

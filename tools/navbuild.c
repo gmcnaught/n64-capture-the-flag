@@ -17,14 +17,14 @@ static uint8_t *read_file(const char *path, uint32_t *size)
 {
     FILE *f = fopen(path, "rb");
     if (!f)
-        return NULL;
+        return nullptr;
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
     rewind(f);
     uint8_t *d = malloc(n > 0 ? (size_t)n : 1);
     if (d && fread(d, 1, (size_t)n, f) != (size_t)n) {
         free(d);
-        d = NULL;
+        d = nullptr;
     }
     fclose(f);
     *size = (uint32_t)n;
@@ -57,8 +57,8 @@ int main(int argc, char **argv)
             return 1;
         }
         struct stat st;
-        uint8_t *old = stat(out, &st) == 0 && st.st_mtime >= self.st_mtime ? read_file(out, &nsize) : NULL;
-        int keep = old && bot_nav_read(&nav, &lv, &t, old, nsize) == 0;
+        uint8_t *old = stat(out, &st) == 0 && st.st_mtime >= self.st_mtime ? read_file(out, &nsize) : nullptr;
+        bool keep = old && bot_nav_read(&nav, &lv, &t, old, nsize) == 0;
         free(old);
         if (!keep) {
             bot_nav_begin(&nav, &lv, &t);

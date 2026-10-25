@@ -171,9 +171,8 @@ static void load_level(int i)
     uint8_t *data = asset_load(path, &size);
     free(level_data);
     level_data = data;
-    int err = level_load(&level, data, (uint32_t)size);
+    [[maybe_unused]] int err = level_load(&level, data, (uint32_t)size);  /* NDEBUG */
     assertf(err == 0, "%s: bad level data (%d)", path, err);
-    (void)err;                  /* NDEBUG */
     level.name = level_names[i];
     level_index = i;
 }
@@ -188,7 +187,7 @@ static void load_nav(const PlayerTuning *t)
     snprintf(path, sizeof path, "rom:/%.*s.nav", (int)strcspn(level_names[level_index], "."),
              level_names[level_index]);
     FILE *f = fopen(path, "rb");
-    uint8_t *data = NULL;
+    uint8_t *data = nullptr;
     if (f) {
         fclose(f);
         data = asset_load(path, &size);
@@ -266,9 +265,9 @@ static void use_mode(int m)
     }
 }
 
-static void d_blit(void *ctx, int spr, int sx, int sy, int w, int h, int x, int y, int flip)
+static void d_blit([[maybe_unused]] void *ctx, int spr, int sx, int sy, int w, int h, int x, int y,
+                   int flip)
 {
-    (void)ctx;
     if (x >= VIEW_W || y >= VIEW_H || x + w <= 0 || y + h <= 0)
         return;
     use_mode(flip ? RMODE_TEX : RMODE_COPY);    /* copy mode can't flip */
@@ -278,10 +277,9 @@ static void d_blit(void *ctx, int spr, int sx, int sy, int w, int h, int x, int 
     });
 }
 
-static void d_blit_tint(void *ctx, int spr, int sx, int sy, int w, int h, int x, int y,
-                        int flip, uint32_t rgb)
+static void d_blit_tint([[maybe_unused]] void *ctx, int spr, int sx, int sy, int w, int h, int x,
+                        int y, int flip, uint32_t rgb)
 {
-    (void)ctx;
     if (x >= VIEW_W || y >= VIEW_H || x + w <= 0 || y + h <= 0)
         return;
     use_mode(RMODE_TINT);
@@ -292,9 +290,8 @@ static void d_blit_tint(void *ctx, int spr, int sx, int sy, int w, int h, int x,
     });
 }
 
-static void d_fill(void *ctx, int x, int y, int w, int h, uint32_t c)
+static void d_fill([[maybe_unused]] void *ctx, int x, int y, int w, int h, uint32_t c)
 {
-    (void)ctx;
     int x0 = x < 0 ? 0 : x, y0 = y < 0 ? 0 : y;
     int x1 = x + w > VIEW_W ? VIEW_W : x + w, y1 = y + h > VIEW_H ? VIEW_H : y + h;
     if (x0 >= x1 || y0 >= y1)
@@ -310,9 +307,8 @@ static void d_fill(void *ctx, int x, int y, int w, int h, uint32_t c)
     rdpq_fill_rectangle(x0, y0, x1, y1);
 }
 
-static void d_text(void *ctx, int x, int y, const char *s)
+static void d_text([[maybe_unused]] void *ctx, int x, int y, const char *s)
 {
-    (void)ctx;
     /* 8 px glyphs would look half as wide at 640: space them TEXT_CW apart
      * and embolden by drawing twice, 1 px apart. */
     const rdpq_textparms_t tp = {.char_spacing = TEXT_CW - 8};
@@ -323,14 +319,13 @@ static void d_text(void *ctx, int x, int y, const char *s)
 
 static surface_t controls_layer;   /* scene_draw_controls, over alpha 0 */
 
-static void d_controls(void *ctx)
+static void d_controls([[maybe_unused]] void *ctx)
 {
-    (void)ctx;
     use_mode(RMODE_COPY);
-    rdpq_tex_blit(&controls_layer, 0, 0, NULL);
+    rdpq_tex_blit(&controls_layer, 0, 0, nullptr);
 }
 
-static const DrawApi draw_api = {d_blit, d_blit_tint, d_fill, NULL, d_controls};
+static const DrawApi draw_api = {d_blit, d_blit_tint, d_fill, nullptr, d_controls};
 
 /* ---- frame ---------------------------------------------------------------- */
 
@@ -357,7 +352,7 @@ static void load_backdrop_sheet(int spr, const char *path)
             fseek(f, 0, SEEK_END);
             int sz = (int)ftell(f), need = 0;
             rewind(f);
-            asset_loadf_into(f, &sz, NULL, &need);  /* NULL: only sets need */
+            asset_loadf_into(f, &sz, nullptr, &need);  /* nullptr: only sets need */
             fclose(f);
             if (need > backdrop_buf_size[spr])
                 backdrop_buf_size[spr] = need;
@@ -370,10 +365,9 @@ static void load_backdrop_sheet(int spr, const char *path)
     fseek(f, 0, SEEK_END);
     int sz = (int)ftell(f), size = backdrop_buf_size[spr];
     rewind(f);
-    bool ok = asset_loadf_into(f, &sz, backdrop_buf[spr], &size);
+    [[maybe_unused]] bool ok = asset_loadf_into(f, &sz, backdrop_buf[spr], &size);  /* NDEBUG */
     fclose(f);
     assertf(ok, "%s needs %d bytes", path, size);
-    (void)ok;                   /* NDEBUG */
     sprites[spr] = sprite_load_buf(backdrop_buf[spr], sz);
 }
 
@@ -433,7 +427,7 @@ static bool selftest_pass, debug;
 static void build_controls_layer(void)
 {
     controls_layer = surface_alloc(FMT_RGBA16, VIEW_W, VIEW_H);
-    rdpq_attach(&controls_layer, NULL);
+    rdpq_attach(&controls_layer, nullptr);
     rdpq_clear(RGBA32(0, 0, 0, 0));
     rmode = RMODE_NONE;
     scene_draw_controls(&game, &draw_api);
@@ -455,7 +449,7 @@ static void build_background(void)
 {
     if (!background.buffer)
         background = surface_alloc(FMT_RGBA16, VIEW_W, VIEW_H);
-    rdpq_attach(&background, NULL);
+    rdpq_attach(&background, nullptr);
     rdpq_clear(RGBA32(0, 0, 0, 0));     /* alpha 0: the sky shows through */
     rmode = RMODE_NONE;
     scene_draw_background(&game, &draw_api);
@@ -479,10 +473,10 @@ static void sky_part(int i, int step, int part)
         int h = sprites[SPR_SKY]->height - sky_band;
         y0 = sky_band + part * h / SKY_PARTS;
         y1 = sky_band + (part + 1) * h / SKY_PARTS;
-        rdpq_attach(&sky_buf[i], NULL);
+        rdpq_attach(&sky_buf[i], nullptr);
         sky_rows[i] |= (uint8_t)(1 << part);
     } else {
-        rdpq_attach_clear(&sky_buf[i], NULL);
+        rdpq_attach_clear(&sky_buf[i], nullptr);
         sky_clean[i] = true;
         sky_rows[i] = ALL;
     }
@@ -534,7 +528,7 @@ static void text(int x, int y, const char *fmt, ...)
     va_start(ap, fmt);
     vsnprintf(buf, sizeof buf, fmt, ap);
     va_end(ap);
-    d_text(NULL, x, y, buf);
+    d_text(nullptr, x, y, buf);
 }
 
 /* Draw the game into disp (from display_get); returns after the frame is
@@ -546,10 +540,10 @@ static void render(surface_t *disp, const char *status, bool wait)
         build_background();
     surface_t *sky = sky_composite();
     g_last_fb = (uint32_t)disp->buffer;
-    rdpq_attach(disp, NULL);
+    rdpq_attach(disp, nullptr);
     rdpq_set_mode_copy(false);          /* every texel, whatever its alpha bit */
     rmode = RMODE_NONE;
-    rdpq_tex_blit(sky, 0, 0, NULL);
+    rdpq_tex_blit(sky, 0, 0, nullptr);
     scene_draw(&game, &draw_api, debug);
 
     if (!selftest_pass || debug)
@@ -673,7 +667,7 @@ static void autotest(const char *list)
     while (1) {
         sound_update(0, 0);         /* music off on the results screen */
         surface_t *disp = display_get();
-        rdpq_attach_clear(disp, NULL);
+        rdpq_attach_clear(disp, nullptr);
         rmode = RMODE_NONE;
         text(16, 4, "REPLAY TEST %lu/%lu PASS", (unsigned long)g_replays_passed,
              (unsigned long)g_replays_run);
@@ -745,10 +739,9 @@ static void music_switch(uint8_t m)
         active = (uint8_t)p;
 }
 
-int sound_open(const char *dir)
+int sound_open([[maybe_unused]] const char *dir)
 {
     char path[64];
-    (void)dir;
     /* Output buffers of 368 samples (a 60 Hz frame at 22047 Hz), 4 of them:
      * mixer_try_play mixes one buffer nearly every frame instead of a
      * 512-sample one on 7 frames in 10, and refilling after a stall (a
@@ -763,7 +756,7 @@ int sound_open(const char *dir)
     }
     for (int i = 0; i < SFX_VOICES; i++)
         mixer_ch_set_vol(i, 0.6f, 0.6f);
-    _Static_assert(MUSIC_COUNT <= 2, "more songs than music players");
+    static_assert(MUSIC_COUNT <= 2, "more songs than music players");
     for (uint8_t m = 1; m <= MUSIC_COUNT; m++)
         music_switch(m);
     music_switch(0);            /* both stopped */
@@ -861,7 +854,7 @@ int main(void)
      * queued and every frame reaches the screen a frame later. */
     display_init(RESOLUTION_640x240, DEPTH_16_BPP, 2, GAMMA_NONE, FILTERS_DISABLED);
     rdpq_init();
-    vi_install_vblank_handler(count_repeats, NULL);
+    vi_install_vblank_handler(count_repeats, nullptr);
     rdpq_text_register_font(1, rdpq_font_load_builtin(FONT_BUILTIN_DEBUG_MONO));
 
     for (int i = 0; i < SPR_COUNT; i++) {
@@ -877,7 +870,7 @@ int main(void)
     assertf(level_count > 0, "no levels in rom:/levels.txt");
     last_ticks = TICKS_READ();
 
-    sound_open(NULL);
+    sound_open(nullptr);
     joypad_poll();
 #ifdef AUTOTEST
     autotest("rom:/check.txt");
@@ -886,7 +879,7 @@ int main(void)
         autotest("rom:/replays.txt");
 
     load_level(0);
-    game_init(&game, &level, NULL, ABIL_ALL);
+    game_init(&game, &level, nullptr, ABIL_ALL);
     set_stages();
     load_nav(&game.tuning);
     game_title(&game);
@@ -910,11 +903,11 @@ int main(void)
         joypad_buttons_t pressed = joypad_get_buttons_pressed(JOYPAD_PORT_1);
         if (pressed.l) {            /* debug: next level */
             load_level((level_index + 1) % level_count);
-            game_init(&game, &level, NULL, ABIL_ALL);
+            game_init(&game, &level, nullptr, ABIL_ALL);
             set_stages();
             load_nav(&game.tuning);
         } else if (pressed.c_down) {
-            game_init(&game, &level, NULL, ABIL_ALL);
+            game_init(&game, &level, nullptr, ABIL_ALL);
             set_stages();
         }
         if (pressed.c_up)
@@ -938,7 +931,7 @@ int main(void)
         FLOG_MARK(2);
         sound_update(game.sfx, audio_music(&game));
         FLOG_MARK(3);
-        render(disp, NULL, false);
+        render(disp, nullptr, false);
         FLOG_MARK(4);
     }
 }
