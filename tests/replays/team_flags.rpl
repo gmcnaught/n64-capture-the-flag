@@ -24,15 +24,15 @@ tune fruit_min 0x0000ea60
 1 C / C / C / LC
 24 C / C / C / LJC
 6 C / C / C / C
-67 C / C / C / LC
-7 C / C / C / LJC
+57 C / C / C / LC
+33 C / C / C / LJC
 1 C / C / C / LC
-35 C / C / C / LJC
-7 C / C / C / C
-20 C / C / LC
+128 C / C / C / LJC
+8 C / C / C / C
+31 C / C / LC
 2 C / C / AC
 21 C / C
 6 C / C / LC
 31 C / C
-hash 269cf03e
+hash 3eb596a9
 kos 0 0 0 0

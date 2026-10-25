@@ -14,12 +14,10 @@ tune fruit_min 0x0000ea60
 15 C / C / C / C
 2 C / C / C / LC
 39 C / C / C / LJC
-1 C / C / C / C
-15 C / C / C / RC
-2 C / C / C / RJC
-1 C / C / C / RC
-23 C / C / C / RJC
-5 C / C / C / C
+2 C / C / C / C
+12 C / C / C / RC
+36 C / C / C / RJC
+16 C / C / C / C
 2 C / C
 2 C / RC
 15 C / RJC
@@ -44,5 +42,5 @@ tune fruit_min 0x0000ea60
 1 C / C
 2 C / AC
 43 C / C
-hash b6cc1976
+hash e8ff4cd1
 kos 0 0 0 0

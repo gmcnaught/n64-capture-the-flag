@@ -72,14 +72,16 @@ tune fruit_min 0x0000ea60
 3 C / LC
 48 C / LJC
 38 C / C
-70 C / LC
-35 C / LJC
-56 C / C
-6 C / RC
+62 C / LC
+33 C / LJC
+1 C / LC
+145 C / LJC
+2 C / C
+7 C / RC
 2 C / DC
 2 C / DJC
 15 C / RC
-26 C / C
+29 C / C
 27 C / LC
 35 C / C
 8 C / RC
@@ -105,5 +107,5 @@ tune fruit_min 0x0000ea60
 3 C / RC
 23 C / RJC
 430 C / C
-hash 274519d8
+hash 3097be22
 kos 0 0

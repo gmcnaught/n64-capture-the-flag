@@ -41,5 +41,5 @@ tune fruit_min 0x0000ea60
 21 C / C
 2 C / AC
 132 C / C
-hash db5429b9
+hash c8ca4132
 kos 0 1

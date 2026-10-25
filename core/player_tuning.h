@@ -27,7 +27,7 @@
     .wall_reach         = 2, \
     .climb_speed        = 0x00010000, /* 1.0000 */ \
     .pad_speed          = 0x00060000, /* 6.0000 */ \
-    .coyote_frames      = 5, \
+    .coyote_frames      = 10, \
     .jump_buffer_frames = 5, \
     .drop_frames        = 8, \
     .hurt_frames        = 36, \
