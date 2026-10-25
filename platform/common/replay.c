@@ -102,6 +102,10 @@ int replay_load(Replay *r, const char *path)
             r->players = (uint8_t)(n > MAX_PLAYERS ? MAX_PLAYERS : n < TEAM_COUNT ? TEAM_COUNT : n);
             continue;
         }
+        if (sscanf(line, "cpu %ld", &n) == 1) {
+            r->cpu = (uint8_t)n;
+            continue;
+        }
         if (sscanf(line, "tune %63s %63s", a, b) == 2) {
             int i;
             for (i = 0; i < tuning_field_count; i++)
@@ -206,6 +210,8 @@ int replay_save(const Replay *r, const char *path)
     if (r->players != TEAM_COUNT)
         fprintf(f, "players %u\n", r->players);
     fprintf(f, "abilities %u\n", r->abilities);
+    if (r->cpu)
+        fprintf(f, "cpu %u\n", r->cpu);
     for (int i = 0; i < tuning_field_count; i++) {
         int32_t v = *tuning_field((PlayerTuning *)&r->tuning, i);
         if (v != *tuning_field(&d, i))

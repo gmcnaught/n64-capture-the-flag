@@ -184,6 +184,15 @@ static void path_step(Platform *pl, int *x, int *y)
     *y = len ? pl->y0 + dy * s / len : pl->y0;
 }
 
+void game_platform_ahead(const Game *g, int i, int frames, int *x, int *y)
+{
+    Platform pl = g->platforms[i];
+    *x = g->lv.solids[i].x;
+    *y = g->lv.solids[i].y;
+    for (int k = 0; k < frames; k++)
+        path_step(&pl, x, y);
+}
+
 /* Platforms to their round-start places: phase frames along the path. */
 static void reset_platforms(Game *g)
 {
@@ -314,6 +323,8 @@ void game_title(Game *g)
 void game_set_players(Game *g, int n)
 {
     g->player_count = (uint8_t)(n < TEAM_COUNT ? TEAM_COUNT : n > MAX_PLAYERS ? MAX_PLAYERS : n);
+    if (g->cpus >= g->player_count)
+        g->cpus = (uint8_t)(g->player_count - 1);
     new_round(g);
 }
 
@@ -343,6 +354,7 @@ void game_set_level(Game *g, const Level *lv)
     g->title_sel = keep.title_sel;
     g->stage = keep.stage;
     g->stage_count = keep.stage_count;
+    g->cpus = keep.cpus;
     for (int t = 0; t < MAX_PLAYERS; t++)
         g->prev_buttons[t] = keep.prev_buttons[t];
     if (keep.player_count != g->player_count)
@@ -937,6 +949,8 @@ static void setup_menu(Game *g, uint16_t pressed)
         if (g->stage_count < 2)
             return;
         g->stage = (uint8_t)((g->stage + step + g->stage_count) % g->stage_count);
+    } else if (g->title_sel == SETUP_CPU) {     /* 0 .. player_count - 1: one plays */
+        g->cpus = (uint8_t)((g->cpus + step + g->player_count) % g->player_count);
     } else {
         int choices = MAX_PLAYERS - TEAM_COUNT + 1;
         game_set_players(g, TEAM_COUNT + (g->player_count - TEAM_COUNT + step + choices) % choices);
@@ -1150,6 +1164,8 @@ uint32_t game_hash(const Game *g)
                (uint32_t)g->menu_sel << 24);
     if (g->title_sel | g->stage | g->backdrop)  /* earlier replays keep their hashes */
         h = mix(h, g->title_sel | (uint32_t)g->stage << 8 | (uint32_t)g->backdrop << 16);
+    if (g->cpus)
+        h = mix(h, 0xc0u | g->cpus);
     if (g->wind_count) {
         h = mix(h, g->round_frame);
         for (int i = 0; i < g->wind_count; i++)

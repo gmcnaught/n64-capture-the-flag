@@ -21,8 +21,9 @@
  * Keys: P1 WASD move, Space jump, F attack, Left Shift dash; P2 arrows
  * move, Right Shift jump, / attack, . dash; Enter start / pause (menu:
  * up/down, jump picks; setup screen: up/down row, left/right stage or
- * players, B back). Gamepad 1 also controls P1, gamepad 2 P2; gamepads 3
- * and 4 are P3 and P4 (no keys). Starts on the title screen (a replay
+ * players or CPU, B back). Gamepad 1 also controls P1, gamepad 2 P2; gamepads 3
+ * and 4 are P3 and P4 (no keys). CPU players (the setup screen's CPU row,
+ * platform/common/cpu.h) take the place of the last players' controls. Starts on the title screen (a replay
  * starts in play).
  * Debug: Backspace restart (skips the title), Tab next level, P freeze, N step one frame
  * (frozen), F1 debug overlay, F2 tuning panel ([ ] select, - = adjust,
@@ -37,6 +38,7 @@
 #include <SDL3/SDL_main.h>
 
 #include "audio.h"
+#include "cpu.h"
 #include "game.h"
 #include "replay.h"
 #include "scene.h"
@@ -118,6 +120,21 @@ static int load_level(const char *name)
     return 0;
 }
 
+/* The CPU players' graph of the loaded level: its .nav file, or built here
+ * (about a second) if missing or made with other tuning. */
+static void load_nav(const PlayerTuning *t)
+{
+    char path[512];
+    uint32_t size = 0;
+    snprintf(path, sizeof path, "%s/levels/%.*s.nav", assets_dir,
+             (int)strcspn(level_name, "."), level_name);
+    uint8_t *data = read_file(path, &size);
+    if (!cpu_set_level(&level, t, data, data ? size : 0))
+        while (!cpu_build(64))
+            ;
+    free(data);
+}
+
 /* Title screen stage list: the level list, at the current level. */
 static void set_stages(Game *g)
 {
@@ -185,11 +202,18 @@ static int run_headless(const char *path, int check, int update, long max_frames
     if (replay_load(&r, path) || load_level(r.level))
         return 2;
     replay_start(&r, &g, &level);
+    if (r.cpu) {
+        load_nav(&g.tuning);
+        cpu_seed(1);
+    }
     size_t n = r.count;
     if (max_frames >= 0 && (size_t)max_frames < n)
         n = (size_t)max_frames;
     for (size_t i = 0; i < n; i++) {
-        game_tick(&g, r.frames[i].in);
+        InputState in[MAX_PLAYERS];
+        memcpy(in, r.frames[i].in, sizeof in);
+        cpu_play(&g, r.cpu, in);
+        game_tick(&g, in);
         if (trace)
             for (int t = 0; t < g.player_count; t++) {
                 const Player *p = &g.players[t];
@@ -570,11 +594,13 @@ int main(int argc, char **argv)
     Game g;
     if (playing) {
         replay_start(&playback, &g, &level);
+        cpu_seed(1);
     } else {
         game_init(&g, &level, &tuning, abilities);
         set_stages(&g);
         game_title(&g);
     }
+    load_nav(&g.tuning);
     Replay rec;
     if (record_path)
         replay_init(&rec, cur_level, g.abilities, &g.tuning);
@@ -641,6 +667,7 @@ int main(int argc, char **argv)
             PlayerTuning t = g.tuning;
             game_init(&g, &level, &t, abilities);
             set_stages(&g);
+            load_nav(&g.tuning);
             if (record_path) {
                 replay_free(&rec);
                 replay_init(&rec, cur_level, g.abilities, &t);
@@ -664,12 +691,15 @@ int main(int argc, char **argv)
                     for (int t = 0; t < MAX_PLAYERS; t++)
                         in[t] = playback.frames[playback_pos].in[t];
                     playback_pos++;
+                    cpu_play(&g, playback.cpu, in);
                 } else {
                     playing = 0;
                     printf("replay done: frame %lu hash %08lx\n", (unsigned long)g.frame,
                            (unsigned long)game_hash(&g));
                 }
             }
+            if (!playing)
+                cpu_play(&g, cpu_mask(&g), in);
             if (record_path)
                 replay_push(&rec, in);
             game_tick(&g, in);
@@ -677,6 +707,7 @@ int main(int argc, char **argv)
                 snprintf(cur_level, sizeof cur_level, "%s", level_names[g.stage]);
                 if (load_level(cur_level) == 0) {
                     game_set_level(&g, &level);
+                    load_nav(&g.tuning);
                     if (record_path) {
                         replay_free(&rec);
                         replay_init(&rec, cur_level, g.abilities, &g.tuning);

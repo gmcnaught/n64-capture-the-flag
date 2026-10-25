@@ -583,10 +583,13 @@ static void draw_title(const Game *g, const DrawApi *d)
         font_center(g, d, 170, "PRESS START", FONT_MEDIUM, TINT_WHITE, 0);
 }
 
-/* Setup screen: STAGE and PLAYERS rows. */
+/* Setup screen: STAGE, PLAYERS and CPU rows. */
 static void draw_setup(const Game *g, const DrawApi *d)
 {
     static const char *const players[] = {"1 VS 1", "2 VS 1", "2 VS 2"};
+    char cpu[16] = "NONE";          /* the CPU players: "P3 P4" */
+    for (int i = g->player_count - g->cpus, k = 0; g->cpus && i < g->player_count; i++)
+        k += snprintf(cpu + k, sizeof cpu - (size_t)k, "%sP%d", k ? " " : "", i + 1);
     dim(d);
     font_center(g, d, 40, "MATCH", FONT_LARGE, TINT_GOLD, 0);
     int bw = font_width("B BACK", FONT_SMALL);
@@ -600,9 +603,10 @@ static void draw_setup(const Game *g, const DrawApi *d)
     for (; n[k] && n[k] != '.' && k < (int)sizeof stage - 1; k++)
         stage[k] = (char)(n[k] >= 'a' && n[k] <= 'z' ? n[k] - 'a' + 'A' : n[k]);
     stage[k] = 0;
-    title_row(g, d, 250, 104, "STAGE", stage, g->title_sel == SETUP_STAGE, g->stage_count);
-    title_row(g, d, 250, 128, "PLAYERS", players[g->player_count - TEAM_COUNT],
+    title_row(g, d, 250, 96, "STAGE", stage, g->title_sel == SETUP_STAGE, g->stage_count);
+    title_row(g, d, 250, 120, "PLAYERS", players[g->player_count - TEAM_COUNT],
               g->title_sel == SETUP_PLAYERS, MAX_PLAYERS - TEAM_COUNT + 1);
+    title_row(g, d, 250, 144, "CPU", cpu, g->title_sel == SETUP_CPU, g->player_count);
     if ((g->frame / 30) & 1 || g->frame < 30)
         font_center(g, d, 184, "PRESS START", FONT_MEDIUM, TINT_WHITE, 0);
 }

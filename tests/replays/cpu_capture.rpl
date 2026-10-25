@@ -1,0 +1,7 @@
+# cpu_capture P2 is a CPU player (core/bot.h) against an idle P1: it takes the three red flags into the blue goal and wins the round.
+level arena.lvl
+abilities 7
+cpu 2
+1700 C / C
+hash cdaac74c
+kos 0 0

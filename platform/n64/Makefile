@@ -28,7 +28,7 @@ C_FILES := $(shell find src -name '*.c')
 CORE_FILES := $(wildcard $(CORE_DIR)/*.c)
 OBJS := $(addprefix $(BUILD_DIR)/,$(C_FILES:.c=.o)) \
         $(patsubst $(CORE_DIR)/%.c,$(BUILD_DIR)/core/%.o,$(CORE_FILES)) \
-        $(addprefix $(BUILD_DIR)/common/,replay.o scene.o audio_names.o)
+        $(addprefix $(BUILD_DIR)/common/,replay.o scene.o audio_names.o cpu.o)
 
 $(BUILD_DIR)/core/%.o: $(CORE_DIR)/%.c
 	@mkdir -p $(dir $@)
@@ -54,7 +54,7 @@ MUSIC_DIR := ../../new-assets/music
 MODULES := $(basename $(notdir $(wildcard $(MUSIC_DIR)/*.xm)))
 # N64 music is modules only: rendered and synthesized music WAVs stay out.
 SOUNDS := $(filter-out $(MODULES) music_%,$(basename $(notdir $(wildcard $(ASSETS_DIR)/audio/*.wav))))
-LEVEL_FILES := $(wildcard $(ASSETS_DIR)/levels/*.lvl) $(ASSETS_DIR)/levels/levels.txt
+LEVEL_FILES := $(wildcard $(ASSETS_DIR)/levels/*.lvl $(ASSETS_DIR)/levels/*.nav) $(ASSETS_DIR)/levels/levels.txt
 REPLAY_FILES := $(wildcard ../../tests/replays/*.rpl)
 FS_FILES := $(addprefix $(FS_DIR)/,$(addsuffix .sprite,$(SPRITES))) \
             $(addprefix $(FS_DIR)/,$(addsuffix .wav64,$(SOUNDS))) \

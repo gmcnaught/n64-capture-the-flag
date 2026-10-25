@@ -1,0 +1,7 @@
+# cpu_duel CPU against CPU on Factory: both capture, recover their own flags from the other goal, and kick carriers.
+level factory.lvl
+abilities 7
+cpu 3
+3600 C / C
+hash cbb50976
+kos 0 0

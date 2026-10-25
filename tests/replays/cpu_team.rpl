@@ -1,0 +1,8 @@
+# cpu_team Four CPU players on Snow (2 VS 2 on ice): teammates split the aims; carriers are hunted and kicked.
+level snow.lvl
+players 4
+abilities 7
+cpu 15
+3000 C / C
+hash 1f9e0eee
+kos 0 0 0 0

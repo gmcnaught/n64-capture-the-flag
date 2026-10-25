@@ -3,6 +3,9 @@
  *   # comment
  *   level arena.lvl
  *   players 4                       (optional: Game.player_count, default 2)
+ *   cpu 2                           (optional: bit per player played by a bot,
+ *                                    platform/common/cpu.h, seeded with 1; the
+ *                                    file's input for those players is not used)
  *   abilities 7
  *   tune jump_speed 0x00068000      (fields that differ from the defaults)
  *   30 R                            (frames, P1 buttons LRUDJXASC or -, [sx sy])
@@ -27,6 +30,7 @@ typedef struct {
     char level[64];
     uint8_t abilities;
     uint8_t players;                /* Game.player_count at the start */
+    uint8_t cpu;                    /* players played by bots (bit per player) */
     PlayerTuning tuning;
     ReplayFrame *frames;
     size_t count, cap;

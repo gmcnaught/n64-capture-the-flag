@@ -1,0 +1,7 @@
+# cpu_sky P1 is a CPU player on Sky: it rides the lifts and clouds (moving platforms, timed on their paths) to take blue flags into the red goal.
+level sky.lvl
+abilities 7
+cpu 1
+3000 C / C
+hash 6037668b
+kos 0 0

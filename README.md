@@ -14,8 +14,8 @@ with libdragon and SDL3, so the same game plays on the N64 and on PC.
 
 **N64:** download `capture-the-flag.z64` from the
 [latest release](https://github.com/gmcnaught/n64-capture-the-flag/releases/latest)
-and run it on the MiSTer N64 core or in the ares emulator. Plug in two to
-four controllers.
+and run it on the MiSTer N64 core or in the ares emulator. Plug in one to
+four controllers (the computer can play the others).
 
 **PC:** build it from source (below) and run `make run`. Two players share
 the keyboard, or plug in gamepads (players 3 and 4: gamepads 3 and 4).
@@ -37,12 +37,20 @@ Each team keeps three flags by its start.
   stop their jump.
 - **Water fruit:** now and then a fruit appears up top. Touch it and a
   stream of water pours down the platforms, sweeping up anyone in its way.
+- **CPU players:** the computer can play the last players (the setup
+  screen's CPU row). A CPU player steals flags and takes them to its goal,
+  brings its own flags back from your goal, chases and kicks whoever
+  carries its flags, and guards its flags when you come near. It is
+  beatable on purpose: it reacts late, kicks only now and then, gives up
+  a long chase, never dashes, and sometimes misses the jump to its goal.
 
 Every round starts with a 3, 2, 1, GO! countdown. Press Start to pause; the
 pause menu has a CONTROLS screen. Start on the title screen opens the
-match setup: pick the stage (Arena, Forest, Desert, Snow, Lava, Sky, Factory) and
-the players (1 VS 1, 2 VS 1, 2 VS 2) with up/down and left/right, then
-Start. On Snow, the ground is ice: you speed up and slow down slowly
+match setup: pick the stage (Arena, Forest, Desert, Snow, Lava, Sky, Factory),
+the players (1 VS 1, 2 VS 1, 2 VS 2) and which of them the computer plays
+(CPU: none, or the last one, two or three: P2 alone in 1 VS 1, P3 P4 for
+a CPU partner each in 2 VS 2) with up/down and left/right, then Start.
+On Snow, the ground is ice: you speed up and slow down slowly
 there, so a dash or a run slides on. On Desert, a dust storm
 hangs over each of the two long side platforms and every few seconds
 blows outward, pushing players and dropped flags off toward the walls;
@@ -104,7 +112,11 @@ neighbors), so LDtk's own tile layers only show in the editor.
 ## How it works
 
 One integer-only C99 core runs the game on both platforms: movement,
-collision, flags and rounds. The N64 build draws it with libdragon at
+collision, flags and rounds. CPU players (`core/bot.c`) find their way
+with A* over a graph of each stage's standing spots and the jumps, falls
+and platform rides between them, found by running the real movement code
+from every spot at build time (`tools/navbuild.c`, a `.nav` file beside
+each level); they press buttons like a player, so replays record them. The N64 build draws it with libdragon at
 640x240; the PC build draws the same frames with SDL3. Recorded replays
 must produce identical results on PC and N64, which `make test` and
 `make check` verify. Music is tracker modules, played by libdragon's xm64

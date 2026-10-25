@@ -5,7 +5,7 @@ BIN := $(BUILD_DIR)/ctf
 
 CORE_SRCS := $(wildcard $(ROOT)/core/*.c)
 HOST_SRCS := main.c audio.c
-COMMON_SRCS := replay.c scene.c audio_names.c
+COMMON_SRCS := replay.c scene.c audio_names.c cpu.c
 XM_SRCS := xm.c load.c play.c analyze.c
 OBJS := $(HOST_SRCS:%.c=$(BUILD_DIR)/platform/host/%.o) $(CORE_SRCS:$(ROOT)/%.c=$(BUILD_DIR)/%.o) \
         $(COMMON_SRCS:%.c=$(BUILD_DIR)/platform/common/%.o) $(XM_SRCS:%.c=$(BUILD_DIR)/libxm/%.o)
@@ -41,7 +41,13 @@ $(BUILD_DIR)/libxm/%.o: $(XM_DIR)/%.c $(BUILD_DIR)/libxm/xm.h
 $(BUILD_DIR)/platform/host/audio.o: $(BUILD_DIR)/libxm/xm.h
 
 ROUTEFIND := $(BUILD_DIR)/routefind
-all: $(BIN) $(ROUTEFIND)
+NAVBUILD := $(BUILD_DIR)/navbuild
+all: $(BIN) $(ROUTEFIND) $(NAVBUILD)
+
+# CPU players' navigation graphs (the top Makefile's assets).
+navbuild: $(NAVBUILD)
+$(NAVBUILD): $(ROOT)/tools/navbuild.c $(CORE_SRCS:$(ROOT)/%.c=$(BUILD_DIR)/%.o)
+	$(CC) -O2 -std=c99 -Wall -Wextra -I$(ROOT)/core -o $@ $^
 
 # Route finder for scripting replays (tools/make_replays.py).
 $(ROUTEFIND): $(ROOT)/tools/routefind.c $(CORE_SRCS:$(ROOT)/%.c=$(BUILD_DIR)/%.o) \

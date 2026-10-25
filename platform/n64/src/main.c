@@ -18,7 +18,8 @@
  * copied over the dimmed game while the screen is open.
  *
  * Controllers 1 to 4 (P1 .. P4; P3 and P4 play when the setup screen's
- * PLAYERS says so): stick/D-pad move, A jump, Z or R dash, B attack,
+ * PLAYERS says so; the last players are CPU players when its CPU row says
+ * so, platform/common/cpu.h, and their controllers are not read in play): stick/D-pad move, A jump, Z or R dash, B attack,
  * Start start / pause (menu: up/down, A picks). Boots to the title screen;
  * Start opens the setup screen (up/down row, left/right stage or players;
  * a stage change loads that level).
@@ -53,6 +54,7 @@
 #include <libdragon.h>
 
 #include "audio.h"
+#include "cpu.h"
 #include "game.h"
 #include "replay.h"
 #include "scene.h"
@@ -174,6 +176,26 @@ static void load_level(int i)
     (void)err;                  /* NDEBUG */
     level.name = level_names[i];
     level_index = i;
+}
+
+/* The CPU players' graph of the loaded level (rom:/<level>.nav, made by
+ * tools/navbuild.c with the default tuning). Without a matching one the
+ * CPU players stand still: building it here would take minutes. */
+static void load_nav(const PlayerTuning *t)
+{
+    char path[80];
+    int size = 0;
+    snprintf(path, sizeof path, "rom:/%.*s.nav", (int)strcspn(level_names[level_index], "."),
+             level_names[level_index]);
+    FILE *f = fopen(path, "rb");
+    uint8_t *data = NULL;
+    if (f) {
+        fclose(f);
+        data = asset_load(path, &size);
+    }
+    if (!cpu_set_level(&level, t, data, (uint32_t)size))
+        debugf("%s: no graph for this level and tuning: CPU players stand still\n", path);
+    free(data);
 }
 
 /* Title screen stage list: the level list, at the loaded level. */
@@ -580,8 +602,8 @@ static void count_repeats(void *arg)
 
 /* ---- replay test ------------------------------------------------------------ */
 
-#define MAX_REPLAYS 32
-#define RESULT_ROWS 16              /* results screen: then a second column */
+#define MAX_REPLAYS 36
+#define RESULT_ROWS 18              /* results screen: then a second column */
 
 static void autotest(const char *list)
 {
@@ -602,12 +624,19 @@ static void autotest(const char *list)
         }
         load_level(li);
         replay_start(&r, &game, &level);
+        if (r.cpu) {
+            load_nav(&game.tuning);
+            cpu_seed(1);
+        }
         autotest_replay = i;
         for (size_t f = 0; f < r.count; f++) {
             /* As the main loop: a buffer first, then the frame's work. */
             surface_t *disp = display_get();
             uint32_t start = TICKS_READ();
-            tick(r.frames[f].in);
+            InputState in[MAX_PLAYERS];
+            memcpy(in, r.frames[f].in, sizeof in);
+            cpu_play(&game, r.cpu, in);
+            tick(in);
             sound_update(game.sfx, audio_music(&game));
             snprintf(status, sizeof status, "replay %d/%d %.40s", i + 1, count, names[i]);
             render(disp, status, true);
@@ -859,6 +888,7 @@ int main(void)
     load_level(0);
     game_init(&game, &level, NULL, ABIL_ALL);
     set_stages();
+    load_nav(&game.tuning);
     game_title(&game);
     while (1) {
         /* Wait for a free buffer (the vblank) before reading the pads, so
@@ -882,6 +912,7 @@ int main(void)
             load_level((level_index + 1) % level_count);
             game_init(&game, &level, NULL, ABIL_ALL);
             set_stages();
+            load_nav(&game.tuning);
         } else if (pressed.c_down) {
             game_init(&game, &level, NULL, ABIL_ALL);
             set_stages();
@@ -897,10 +928,12 @@ int main(void)
         InputState in[MAX_PLAYERS];
         for (int t = 0; t < MAX_PLAYERS; t++)
             read_input((joypad_port_t)(JOYPAD_PORT_1 + t), &in[t]);
+        cpu_play(&game, cpu_mask(&game), in);
         tick(in);
         if (game.stage != level_index) {
             load_level(game.stage);
             game_set_level(&game, &level);
+            load_nav(&game.tuning);
         }
         FLOG_MARK(2);
         sound_update(game.sfx, audio_music(&game));

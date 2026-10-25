@@ -3,7 +3,8 @@
 #   make            host + n64 (N64 is the primary target)
 #   make host|n64
 #   make run        build assets + host, play (keys: platform/host/main.c)
-#   make assets     LDtk levels -> build/assets/levels, sprites -> build/assets/{host,n64},
+#   make assets     LDtk levels -> build/assets/levels (with the CPU players' graphs,
+#                   tools/navbuild.c), sprites -> build/assets/{host,n64},
 #                   generated sounds -> build/assets/audio
 #   make arena      regenerate the tileset from tools/make_tileset.py, and
 #                   assets/src/levels/arena.ldtk from tools/make_arena.py only if missing
@@ -73,6 +74,8 @@ LEVELS := $(wildcard assets/src/levels/*.ldtk)
 assets: $(VENV_PY)
 	@rm -f build/assets/levels/levels.txt
 	@for f in $(LEVELS); do $(VENV_PY) tools/ldtk_import.py $$f build/assets/levels || exit 1; done
+	@$(MAKE) --no-print-directory -C platform/host navbuild
+	platform/host/build/navbuild build/assets/levels/*.lvl
 	$(VENV_PY) tools/build_sprites.py build/assets
 	@test build/assets/audio/.stamp -nt tools/make_audio.py || \
 	  { $(VENV_PY) tools/make_audio.py build/assets/audio && touch build/assets/audio/.stamp; }

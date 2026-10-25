@@ -21,7 +21,10 @@ HEAD).
                  working tree are compared),
                - replays for what a change touches in FEATURE_FILES (the
                  functions in its diff hunk headers and its changed lines,
-                 matched against FEATURES; an extra match only adds replays)
+                 matched against FEATURES; an extra match only adds replays),
+               - the CPU replays (cpu_*: bots play during playback) for a
+                 change under CPU_PATHS (the bot, its graph, the platforms'
+                 CPU players)
 --only NAMES runs just those (names with or without .rpl).
 """
 import argparse
@@ -42,6 +45,7 @@ SMOKE = ["menu", "steal_drop", "duel", "stack", "ice_slide", "wind_gust", "platf
 LEVEL_SOURCES = ["assets/src/levels/", "tools/ldtk_import.py", "tools/terrain.py",
                  "tools/scenery.py"]
 FEATURE_FILES = ["core/game.c", "core/game.h", "platform/common/scene.c"]
+CPU_PATHS = ["core/bot.", "platform/common/cpu.", "tools/navbuild.c"]
 # Function-name pattern in a hunk header -> replays.
 FEATURES = [
     (r"water|fruit", ["water"]),
@@ -145,6 +149,8 @@ def main():
                     levels = {level_of(n) for n in every}
                 pick([n for n in every if level_of(n) in levels],
                      "level changed: " + ", ".join(sorted(levels)))
+            if any(p.startswith(c) for p in paths for c in CPU_PATHS):
+                pick([n for n in every if n.startswith("cpu_")], "CPU players changed")
             for path in FEATURE_FILES:
                 text = "\n".join(hunk_functions(base, path)) if path in paths else ""
                 for pattern, names in FEATURES:

@@ -49,10 +49,11 @@
  * Screens: the title screen (game_title) waits for Start or Jump from any
  * controller, then shows the setup screen: Up/Down pick a row and
  * Left/Right change it: STAGE (the level, Game.stage; the platform sees
- * the change, loads that level and calls game_set_level) and PLAYERS
- * (Game.player_count); Start starts a match (rounds won and knockouts
- * reset), Attack goes back to the title. The picks hold for the match;
- * the backdrop is the level's.
+ * the change, loads that level and calls game_set_level), PLAYERS
+ * (Game.player_count) and CPU (Game.cpus: how many of the last players
+ * the computer plays, core/bot.h; the platform feeds their input);
+ * Start starts a match (rounds won and knockouts reset), Attack goes back
+ * to the title. The picks hold for the match; the backdrop is the level's.
  * Any player's Start pauses and resumes; paused, Up/Down move the menu
  * cursor and Jump/Attack picks RESUME, CONTROLS (a controls screen; Start,
  * Jump or Attack goes back to the menu), RESTART (new match) or QUIT
@@ -146,7 +147,7 @@ enum { FS_HOME, FS_CARRIED, FS_DROPPED, FS_PLACED };
 enum { MENU_RESUME, MENU_CONTROLS, MENU_RESTART, MENU_QUIT, MENU_COUNT };   /* pause menu items */
 enum { PAUSE_MENU = 1, PAUSE_CONTROLS };    /* Game.paused, when nonzero */
 enum { TITLE_SCREEN = 1, TITLE_SETUP };    /* Game.title, when nonzero */
-enum { SETUP_STAGE, SETUP_PLAYERS, SETUP_ROWS };    /* setup screen rows */
+enum { SETUP_STAGE, SETUP_PLAYERS, SETUP_CPU, SETUP_ROWS };    /* setup screen rows */
 
 typedef struct {
     Body body;                  /* position; falls while dropped */
@@ -166,6 +167,7 @@ typedef struct {
     PlayerTuning tuning;
     Player players[MAX_PLAYERS];    /* the first player_count play */
     uint8_t player_count;
+    uint8_t cpus;                   /* the last cpus players are CPU players (0 .. player_count - 1) */
     int16_t spawn_x[MAX_PLAYERS], spawn_y[MAX_PLAYERS]; /* body top-left at the player's start */
     Flag flags[MAX_GAME_FLAGS];
     uint8_t flag_count;
@@ -247,6 +249,12 @@ void game_tick(Game *g, const InputState in[MAX_PLAYERS]);
 /* Team of player i. */
 static inline int game_team(int i) { return i % TEAM_COUNT; }
 
+/* Is player i a CPU player (the platform passes core/bot.h's input)? */
+static inline int game_is_cpu(const Game *g, int i)
+{
+    return i < g->player_count && i >= g->player_count - g->cpus;
+}
+
 /* Frames until zone z's next gust starts: 0 while one blows. During the
  * last WIND_WARN frames the gust is signaled. */
 uint16_t game_zone_calm(const Game *g, const WindZone *z);
@@ -254,6 +262,10 @@ uint16_t game_zone_calm(const Game *g, const WindZone *z);
 uint16_t game_wind_calm(const Game *g);
 /* Sum of the forces of the sideways zones a body is in (fx px/frame). */
 int32_t game_wind_at(const Game *g, const Body *b);
+
+/* Top-left of moving platform i after `frames` more ticks of play (it
+ * moves on its path regardless of what it carries). */
+void game_platform_ahead(const Game *g, int i, int frames, int *x, int *y);
 
 /* Hash of all simulation state, for replay tests. */
 uint32_t game_hash(const Game *g);
