@@ -23,8 +23,8 @@
  * Start start / pause (menu: up/down, A picks). Boots to the title screen;
  * Start opens the setup screen (up/down row, left/right stage or players;
  * a stage change loads that level).
- * Debug (controller 1): L next level, C-down restart (skips the title),
- * C-up debug overlay.
+ * Debug (controller 1; not in the NDEBUG release ROM): L next level,
+ * C-down restart (skips the title), C-up debug overlay.
  *
  * Textures are RGBA16 (RGBA5551), the sky sheets CI8 (a palette of RGBA16
  * colors: half the memory, the same pixels).
@@ -900,6 +900,7 @@ int main(void)
         flog_frame();
 #endif
         joypad_poll();
+#ifndef NDEBUG
         joypad_buttons_t pressed = joypad_get_buttons_pressed(JOYPAD_PORT_1);
         if (pressed.l) {            /* debug: next level */
             load_level((level_index + 1) % level_count);
@@ -912,7 +913,6 @@ int main(void)
         }
         if (pressed.c_up)
             debug = !debug;
-#ifndef NDEBUG
         joypad_buttons_t held = joypad_get_buttons_held(JOYPAD_PORT_1);
         if (held.c_left && held.c_right)
             log_close();
